@@ -52,3 +52,7 @@ Peripherals:
 - ADC (Analog-to-Digital Converter)
 
 - GPIO
+
+Authors:
+
+hardware and firmware: Michał Jurek
