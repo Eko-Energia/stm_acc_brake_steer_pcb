@@ -17,6 +17,21 @@ Hall Effect Sensor: Used to detect the initial phase of the pedal press. This al
 - Steering Wheel
 Linear Potentiometer (LPF 175mm): Serves as a redundant sensor for the main digital encoder. It provides precise information about the steering wheel angle, which is then used by the main vehicle computer for advanced functions like torque vectoring.
 
+STM pin config: 
+- PA0 - ADC 1 channel 1
+- PA1 - ADC 1 channel 2
+- PA2 - ADC 1 channel 3
+- PA4 - ADC 2 channel 1
+- PA5 - ADC 2 channel 2
+- PA6 - ADC 2 channel 3
+- PA8 - LED
+- PA9 - UART_TX
+- PA10 - UART_RX
+- PA11 - CAN_RX
+- PA12 - CAN_TX
+- PA_13 - SWDIO
+- PA_14 - SWCLK
+- PF0/OSC_IN - osc. output
 
 Tech Stack
 Microcontroller: STM32 (e.g., L4 or F4 series)
@@ -25,12 +40,12 @@ Language: C (Bare-metal)
 
 Communication:
 
-CAN Bus
+- CAN Bus
 
-UART
+- UART
 
 Peripherals:
 
-ADC (Analog-to-Digital Converter)
+- ADC (Analog-to-Digital Converter)
 
-GPIO
+- GPIO
