@@ -37,7 +37,7 @@ STM pin config:
 - PF0/OSC_IN - osc. output
 
 Tech Stack
-Microcontroller: STM32 (e.g., L4 or F4 series)
+Microcontroller: STM32F303K8T6
 
 Language: C (Bare-metal)
 
@@ -52,3 +52,7 @@ Peripherals:
 - ADC (Analog-to-Digital Converter)
 
 - GPIO
+
+Authors:
+
+hardware and firmware: Michał Jurek
