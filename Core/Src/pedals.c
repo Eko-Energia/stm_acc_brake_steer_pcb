@@ -48,7 +48,7 @@ uint8_t accelPedalValue(uint16_t accel1val, uint16_t accel2val)
 
 //BEGIN of brake pedal (pistons) section
 
-//	acceptError -> accepted error in percentage value
+//	acceptBrakeError -> accepted error in percentage value
 //	How to input wanted percentage value, ex. below:
 //	0.5% -> 5
 //	50.6% -> 506
@@ -69,7 +69,7 @@ int brakePistonsCheck(uint16_t brakePiston1, uint16_t brakePiston2, uint8_t acce
 uint8_t brakePistonsValue(uint16_t brakePiston1, uint16_t brakePiston2)
 {
 	uint8_t brake_piston_percentage_scaled;
-	if (brakePistonsCheck(brakePiston1, brakePiston2, ACCEPT_BRAKE_ERROR))
+	if (!brakePistonsCheck(brakePiston1, brakePiston2, ACCEPT_BRAKE_ERROR))
 	{
 		uint16_t current_brake_piston_val = brakePiston1;
 		if (current_brake_piston_val >= SENSOR_ADC_MAX_VALUE) {
