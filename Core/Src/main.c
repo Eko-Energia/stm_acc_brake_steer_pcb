@@ -22,6 +22,9 @@
 #include "can.h"
 #include "dma.h"
 #include "gpio.h"
+#include "can_driver.h"
+#include "pedals.h"
+#include "pedals_const_val.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -35,9 +38,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define SENSOR_ADC2_MAX_VALUE 1023 // Maksymalna wartość z ADC2_VAL[2] odpowiadająca 100%
-#define SENSOR_ADC1_MAX_VALUE 1023 //Max value read from all ADC1 channels
-#define NUM_SAMPLES_FOR_STEER_AVG 1 // Liczba próbek do uśrednienia dla czujnika skrętu
+
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -51,17 +53,13 @@
 uint16_t ADC1_VAL[3];
 uint16_t ADC2_VAL[3];
 
+
 uint8_t TxData[8];
 CAN_TxHeaderTypeDef TxHeader;
 uint32_t TxMailBox;
 
-volatile int isADC1finished = 0;
-volatile int isADC2finished = 0;
 
-// Zmienne do uśredniania dla czujnika skrętu (np. z ADC1_VAL[2])
-uint32_t steer_adc_sum = 0;
-uint16_t steer_sample_count = 0;
-uint8_t steer_percentage_to_send = 0; // Ostatnia obliczona wartość procentowa skrętu
+
 
 /* USER CODE END PV */
 
@@ -75,17 +73,15 @@ void SystemClock_Config(void);
 /* USER CODE BEGIN 0 */
 
 
-void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
-{
-  if (hadc->Instance == ADC1)
-  {
-    isADC1finished = 1;
-  }
-  if (hadc->Instance == ADC2)
-  {
-    isADC2finished = 1;
-  }
-}
+
+//
+//void getEncoderData(uint8_t *data)
+//{
+//	data = TxData;
+//}
+
+
+
 /* USER CODE END 0 */
 
 /**
@@ -96,9 +92,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  // Ta sekcja powinna być pusta. Inicjalizacja zmiennych globalnych odbywa się
-  // automatycznie (na 0, jeśli nie podano inaczej) lub w miejscu ich deklaracji.
-  // Dynamiczne przypisania muszą być w pętli lub po inicjalizacji peryferiów.
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -124,9 +118,9 @@ int main(void)
   MX_CAN_Init();
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
-  HAL_ADC_Start_DMA(&hadc2, ADC2_VAL, 3);
+  HAL_ADC_Start_DMA(&hadc2, (uint32_t*)ADC2_VAL, 3);
 
-  HAL_ADC_Start_DMA(&hadc1, ADC1_VAL, 3);
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC1_VAL, 3);
 
 
 
@@ -134,150 +128,55 @@ int main(void)
   {
   Error_Handler();
   }
-
-  TxHeader.StdId = 0x123; //id ramki
+  //can_msg.header.StdId = 0x040;
+  TxHeader.StdId = 0x040; //id ramki
   TxHeader.RTR = CAN_RTR_DATA; //CAN_RTR_DATA oznacza że nasza ramka będzie przenosić dane, mogłoby być jeszcze CAN_RTR_REMOTE wtedy ramka nie przenosi danych
   // tylko służy do żądania danych od innego węzła
   TxHeader.IDE = CAN_ID_STD; //określa czy id jest normalne czy extended
 
-  TxHeader.DLC = 6; // określa ilość kontenerów w wiadomości
+  TxHeader.DLC = 4; // określa ilość kontenerów w wiadomości
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin); // Ogólne miganie diodą "życia"
-    HAL_Delay(100); // Ogólne opóźnienie pętli
-
-    // Sprawdź, czy dane z obu ADC są gotowe
+    HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin); // miganie diodą
+    //Dodać timer opóźniający
+    HAL_Delay(200);
     if (isADC1finished && isADC2finished)
-    {
-      isADC1finished = 0; // Wyzeruj flagi
-      isADC2finished = 0;
+        {
+    		isADC1finished = 0;
+    		isADC2finished = 0;
 
-      // --- Przetwarzanie danych z ADC1 dla kierownicy ---
-
-      uint16_t current_steer_val = ADC1_VAL[2];
-      uint8_t steer_percentage_to_send;
+          // --- Variable declaration as uint16_t, to storage values 0-1000 ---
 
 
-      if (current_steer_val >= SENSOR_ADC1_MAX_VALUE) {
-			steer_percentage_to_send = 100;
-      }
-      else {
-    	uint32_t temp_calc_steer = ((uint32_t)current_steer_val * 100) + (SENSOR_ADC1_MAX_VALUE / 2);
-		steer_percentage_to_send = (uint8_t)(temp_calc_steer / SENSOR_ADC1_MAX_VALUE);
-		}
-      if (steer_percentage_to_send > 100) {
-		 steer_percentage_to_send = 100;
-		}
+          // ---  ADC1 data processing for STEERING WHEEL ---
+          //uint8_t current_steer_val = ADC1_VAL[2];
 
-      // --- Przetwarzanie danych z ADC1 dla pedału gazu ---
-
-		uint16_t current_accel_val1 = ADC1_VAL[0];
-
-		uint8_t accel_1_percentage_to_send;
-
-
-		if (current_accel_val1 >= SENSOR_ADC1_MAX_VALUE) {
-			accel_1_percentage_to_send = 100;
-		}
-		else {
-		uint32_t temp_calc_accel_1 = ((uint32_t)current_accel_val1 * 100) + (SENSOR_ADC1_MAX_VALUE / 2);
-		accel_1_percentage_to_send = (uint8_t)(temp_calc_accel_1 / SENSOR_ADC1_MAX_VALUE);
-		}
-		if (accel_1_percentage_to_send > 100) {
-			accel_1_percentage_to_send = 100;
-		}
-
-		// --- Przetwarzanie danych z ADC2 dla pedału gazu ---
-
-
-		uint16_t current_accel_val2 = ADC2_VAL[0];
-		uint8_t accel_2_percentage_to_send;
-
-
-		if (current_accel_val2 >= SENSOR_ADC2_MAX_VALUE) {
-			accel_2_percentage_to_send = 100;
-		}
-		else {
-		uint32_t temp_calc_accel_2 = ((uint32_t)current_accel_val2 * 100) + (SENSOR_ADC2_MAX_VALUE / 2);
-		accel_2_percentage_to_send = (uint8_t)(temp_calc_accel_2 / SENSOR_ADC2_MAX_VALUE);
-		}
-		if (accel_2_percentage_to_send > 100) {
-			accel_2_percentage_to_send = 100;
-		}
-
-
-		//--- Przetwarzanie danych z ADC2 dla pedału hamulca - hall ---
-
-		  uint16_t current_brake_adc_val = ADC2_VAL[2];
-		  uint8_t brake_hall_percentage_to_send;
-
-		  if (current_brake_adc_val >= SENSOR_ADC2_MAX_VALUE) {
-				  brake_hall_percentage_to_send = 100;
-		  } else {
-			  uint32_t temp_calc_brake = ((uint32_t)current_brake_adc_val * 100) + (SENSOR_ADC2_MAX_VALUE / 2);
-			  brake_hall_percentage_to_send = (uint8_t)(temp_calc_brake / SENSOR_ADC2_MAX_VALUE);
-		  }
-		  if (brake_hall_percentage_to_send > 100) {
-			  brake_hall_percentage_to_send = 100;
-		  }
-
-      //--- Przetwarzanie danych z ADC2 dla pedału hamulca - tłoczki ---
-
-	  uint16_t current_brake_piston_adc_val_1 = ADC1_VAL[1]; // Odczyt z ADC2 (wartość 6-bitowa, 0-63)
-	  uint8_t brake_piston_1_percentage_to_send;
-
-	  if (current_brake_piston_adc_val_1 >= SENSOR_ADC1_MAX_VALUE) {
-		  brake_piston_1_percentage_to_send = 100;
-		} else {
-			uint32_t temp_calc_brake_piston_1 = ((uint32_t)current_brake_piston_adc_val_1 * 100) + (SENSOR_ADC1_MAX_VALUE / 2);
-			brake_piston_1_percentage_to_send = (uint8_t)(temp_calc_brake_piston_1 / SENSOR_ADC1_MAX_VALUE);
-		}
-		if (brake_piston_1_percentage_to_send > 100) {
-			brake_piston_1_percentage_to_send = 100;
-		}
-      //--- Przetwarzanie danych z ADC2 dla pedału hamulca - tłoczki ---
-
-      uint16_t current_brake_piston_adc_val_2 = ADC2_VAL[1]; // Odczyt z ADC2 (wartość 6-bitowa, 0-63)
-	  uint8_t brake_piston_2_percentage_to_send;
-
-	  if (current_brake_piston_adc_val_2 >= SENSOR_ADC2_MAX_VALUE) {
-		  brake_piston_2_percentage_to_send = 100;
-		} else {
-			uint32_t temp_calc_brake_piston_2 = ((uint32_t)current_brake_piston_adc_val_2 * 100) + (SENSOR_ADC2_MAX_VALUE / 2);
-			brake_piston_2_percentage_to_send = (uint8_t)(temp_calc_brake_piston_2 / SENSOR_ADC2_MAX_VALUE);
-		}
-		if (brake_piston_2_percentage_to_send > 100) {
-			brake_piston_2_percentage_to_send = 100;
-		}
+          	TxData[0] = steerValue(ADC1_VAL[2]);;
+			TxData[1] = brakePistonsValue(ADC1_VAL[1], ADC2_VAL[1]);
+			TxData[2] = brakeHallValue(ADC2_VAL[2]);
+			TxData[3] = accelPedalValue(ADC1_VAL[0], ADC2_VAL[0]);
 
 
 
-      // --- Przygotowanie i wysłanie ramki CAN ---
-      TxData[0] = steer_percentage_to_send;
-      TxData[1] = brake_piston_1_percentage_to_send;
-      TxData[2] = brake_piston_2_percentage_to_send;
-      TxData[3] = brake_hall_percentage_to_send;
-      TxData[4] = accel_1_percentage_to_send;
-      TxData[5] = accel_2_percentage_to_send;
+			if (HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailBox) != HAL_OK)
+			{
+			  Error_Handler();
+			}
+          }
 
 
-      // TxHeader.DLC jest już ustawione na 3
-
-      if (HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailBox) != HAL_OK)
-      {
-        Error_Handler();
-      }
+        }
     }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-  }
+
   /* USER CODE END 3 */
-}
+
 
 /**
   * @brief System Clock Configuration
