@@ -149,12 +149,6 @@ int main(void)
     		isADC1finished = 0;
     		isADC2finished = 0;
 
-          // --- Variable declaration as uint16_t, to storage values 0-1000 ---
-
-
-          // ---  ADC1 data processing for STEERING WHEEL ---
-          //uint8_t current_steer_val = ADC1_VAL[2];
-
           	TxData[0] = steerValue(ADC1_VAL[2]);;
 			TxData[1] = brakePistonsValue(ADC1_VAL[1], ADC2_VAL[1]);
 			TxData[2] = brakeHallValue(ADC2_VAL[2]);
