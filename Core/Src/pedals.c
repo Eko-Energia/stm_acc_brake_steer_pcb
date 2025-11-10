@@ -21,7 +21,7 @@ int accelPedalCheck(uint16_t accel1val, uint16_t accel2val, uint8_t acceptAccelE
 
 uint8_t accelPedalValue(uint16_t accel1val, uint16_t accel2val)
 {
-	if (accelPedalCheck(accel1val, accel2val, ACCEPT_ACCEL_ERROR))
+	if (!accelPedalCheck(accel1val, accel2val, ACCEPT_ACCEL_ERROR))
 	{
 		uint16_t current_accel_val = accel1val;
 		uint8_t accel_percentage_scaled;

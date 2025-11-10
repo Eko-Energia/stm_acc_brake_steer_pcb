@@ -1138,10 +1138,6 @@ int main(void)
  80007c6:	2200      	movs	r2, #0
  80007c8:	601a      	str	r2, [r3, #0]
 
-
-          // ---  ADC1 data processing for STEERING WHEEL ---
-          //uint8_t current_steer_val = ADC1_VAL[2];
-
           	TxData[0] = steerValue(ADC1_VAL[2]);;
  80007ca:	4b1d      	ldr	r3, [pc, #116]	@ (8000840 <main+0x100>)
  80007cc:	889b      	ldrh	r3, [r3, #4]
@@ -1452,7 +1448,7 @@ uint8_t accelPedalValue(uint16_t accel1val, uint16_t accel2val)
  80009ba:	80fb      	strh	r3, [r7, #6]
  80009bc:	4613      	mov	r3, r2
  80009be:	80bb      	strh	r3, [r7, #4]
-	if (accelPedalCheck(accel1val, accel2val, ACCEPT_ACCEL_ERROR))
+	if (!accelPedalCheck(accel1val, accel2val, ACCEPT_ACCEL_ERROR))
  80009c0:	88b9      	ldrh	r1, [r7, #4]
  80009c2:	88fb      	ldrh	r3, [r7, #6]
  80009c4:	220e      	movs	r2, #14
@@ -1460,7 +1456,7 @@ uint8_t accelPedalValue(uint16_t accel1val, uint16_t accel2val)
  80009c8:	f7ff ffb6 	bl	8000938 <accelPedalCheck>
  80009cc:	4603      	mov	r3, r0
  80009ce:	2b00      	cmp	r3, #0
- 80009d0:	d01c      	beq.n	8000a0c <accelPedalValue+0x5c>
+ 80009d0:	d11c      	bne.n	8000a0c <accelPedalValue+0x5c>
 	{
 		uint16_t current_accel_val = accel1val;
  80009d2:	88fb      	ldrh	r3, [r7, #6]
