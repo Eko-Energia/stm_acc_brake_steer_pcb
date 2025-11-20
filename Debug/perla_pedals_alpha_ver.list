@@ -1360,8 +1360,8 @@ __STATIC_FORCEINLINE void __disable_irq(void)
  8000922:	f44f 7180 	mov.w	r1, #256	@ 0x100
  8000926:	f04f 4090 	mov.w	r0, #1207959552	@ 0x48000000
  800092a:	f001 fffd 	bl	8002928 <HAL_GPIO_TogglePin>
-	  HAL_Delay(200);
- 800092e:	20c8      	movs	r0, #200	@ 0xc8
+	  HAL_Delay(50);
+ 800092e:	2032      	movs	r0, #50	@ 0x32
  8000930:	f000 fa60 	bl	8000df4 <HAL_Delay>
 	  HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
  8000934:	bf00      	nop
@@ -1383,14 +1383,14 @@ int accelPedalCheck(uint16_t accel1val, uint16_t accel2val, uint8_t acceptAccelE
  8000944:	80bb      	strh	r3, [r7, #4]
  8000946:	4613      	mov	r3, r2
  8000948:	70fb      	strb	r3, [r7, #3]
-	int16_t pedalCheck = (accel1val * 1000 / SENSOR_ADC_MAX_VALUE / 2 ) - (accel2val * 1000 / SENSOR_ADC_MAX_VALUE);
+	int16_t pedalCheck = (accel1val * 1000 / SENSOR_ADC_MAX_VALUE  ) - (accel2val * 1000 / SENSOR_ADC_MAX_VALUE);
  800094a:	88fb      	ldrh	r3, [r7, #6]
  800094c:	f44f 727a 	mov.w	r2, #1000	@ 0x3e8
  8000950:	fb02 f303 	mul.w	r3, r2, r3
  8000954:	4a15      	ldr	r2, [pc, #84]	@ (80009ac <accelPedalCheck+0x74>)
  8000956:	fb82 1203 	smull	r1, r2, r2, r3
  800095a:	441a      	add	r2, r3
- 800095c:	1292      	asrs	r2, r2, #10
+ 800095c:	1252      	asrs	r2, r2, #9
  800095e:	17db      	asrs	r3, r3, #31
  8000960:	1ad3      	subs	r3, r2, r3
  8000962:	b29a      	uxth	r2, r3
@@ -1512,7 +1512,7 @@ uint8_t accelPedalValue(uint16_t accel1val, uint16_t accel2val)
  8000a18:	00401005 	.word	0x00401005
 
 08000a1c <brakePistonsCheck>:
-//	acceptError -> accepted error in percentage value
+//	acceptBrakeError -> accepted error in percentage value
 //	How to input wanted percentage value, ex. below:
 //	0.5% -> 5
 //	50.6% -> 506
@@ -1592,7 +1592,7 @@ uint8_t brakePistonsValue(uint16_t brakePiston1, uint16_t brakePiston2)
  8000a9c:	4613      	mov	r3, r2
  8000a9e:	80bb      	strh	r3, [r7, #4]
 	uint8_t brake_piston_percentage_scaled;
-	if (brakePistonsCheck(brakePiston1, brakePiston2, ACCEPT_BRAKE_ERROR))
+	if (!brakePistonsCheck(brakePiston1, brakePiston2, ACCEPT_BRAKE_ERROR))
  8000aa0:	88b9      	ldrh	r1, [r7, #4]
  8000aa2:	88fb      	ldrh	r3, [r7, #6]
  8000aa4:	220e      	movs	r2, #14
@@ -1600,7 +1600,7 @@ uint8_t brakePistonsValue(uint16_t brakePiston1, uint16_t brakePiston2)
  8000aa8:	f7ff ffb8 	bl	8000a1c <brakePistonsCheck>
  8000aac:	4603      	mov	r3, r0
  8000aae:	2b00      	cmp	r3, #0
- 8000ab0:	d01c      	beq.n	8000aec <brakePistonsValue+0x5c>
+ 8000ab0:	d11c      	bne.n	8000aec <brakePistonsValue+0x5c>
 	{
 		uint16_t current_brake_piston_val = brakePiston1;
  8000ab2:	88fb      	ldrh	r3, [r7, #6]
