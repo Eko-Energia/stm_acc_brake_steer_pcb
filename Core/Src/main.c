@@ -21,14 +21,12 @@
 #include "adc.h"
 #include "can.h"
 #include "dma.h"
+#include "tim.h"
 #include "gpio.h"
-#include "can_driver.h"
-#include "pedals.h"
-#include "pedals_const_val.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "pedals.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -55,12 +53,35 @@ uint16_t ADC2_VAL[3];
 
 
 uint8_t TxData[8];
+uint8_t TxDataTH[8]={0};
+uint8_t TxDataNMT[2]={0};
+
+uint16_t tempTH =0;
+
 CAN_TxHeaderTypeDef TxHeader;
 uint32_t TxMailBox;
 
+CAN_TxHeaderTypeDef TxHeaderTH, TxHeaderNMT;
 
+volatile VehicleState_t Vehicle = {
+    .Charger = {
+        .RawStatus = 1,
+        .IsConnected = false,
+        .LastMsgTick = 0
+    },
+    .Jetson = {0}
+};
 
+extern TIM_HandleTypeDef htim2;
 
+//"CONTROL" signal from frame 0x1806E5F4 (dec:403105268)
+const CAN_Signal_Config_t SIG_CHARGER_CONTROL = {
+    .startBit = 32,
+    .length = 8,
+    .factor = 1.0f,
+    .offset = 0.0f,
+    .isSigned = false
+};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -91,80 +112,121 @@ void SystemClock_Config(void);
 int main(void)
 {
 
-  /* USER CODE BEGIN 1 */
+	/* USER CODE BEGIN 1 */
 
-  /* USER CODE END 1 */
+	/* USER CODE END 1 */
 
-  /* MCU Configuration--------------------------------------------------------*/
+	/* MCU Configuration--------------------------------------------------------*/
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+	HAL_Init();
 
-  /* USER CODE BEGIN Init */
+	/* USER CODE BEGIN Init */
 
-  /* USER CODE END Init */
+	/* USER CODE END Init */
 
-  /* Configure the system clock */
-  SystemClock_Config();
+	/* Configure the system clock */
+	SystemClock_Config();
 
-  /* USER CODE BEGIN SysInit */
+	/* USER CODE BEGIN SysInit */
 
-  /* USER CODE END SysInit */
+	/* USER CODE END SysInit */
 
-  /* Initialize all configured peripherals */
-  MX_GPIO_Init();
-  MX_DMA_Init();
-  MX_ADC2_Init();
-  MX_CAN_Init();
-  MX_ADC1_Init();
-  /* USER CODE BEGIN 2 */
-  HAL_ADC_Start_DMA(&hadc2, (uint32_t*)ADC2_VAL, 3);
+	/* Initialize all configured peripherals */
+	MX_GPIO_Init();
+	MX_DMA_Init();
+	MX_ADC2_Init();
+	MX_CAN_Init();
+	MX_ADC1_Init();
+	MX_TIM2_Init();
+	/* USER CODE BEGIN 2 */
+	HAL_TIM_Base_Start_IT(&htim2);
 
-  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC1_VAL, 3);
+	HAL_ADC_Start_DMA(&hadc2, (uint32_t*)ADC2_VAL, 3);
+
+	HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC1_VAL, 3);
 
 
 
-  if ( HAL_CAN_Start(&hcan) != HAL_OK)
-  {
-  Error_Handler();
-  }
-  //can_msg.header.StdId = 0x040;
-  TxHeader.StdId = 0x040; //id ramki
-  TxHeader.RTR = CAN_RTR_DATA; //CAN_RTR_DATA oznacza że nasza ramka będzie przenosić dane, mogłoby być jeszcze CAN_RTR_REMOTE wtedy ramka nie przenosi danych
-  // tylko służy do żądania danych od innego węzła
-  TxHeader.IDE = CAN_ID_STD; //określa czy id jest normalne czy extended
+	//---------------- FILTER CONFIGURATION -------------------
+	CAN_FilterTypeDef filterConfig;
 
-  TxHeader.DLC = 4; // określa ilość kontenerów w wiadomości
+	filterConfig.SlaveStartFilterBank = 14; // dont care (only matters when > 1 CAN)
+
+
+	// CAN filter config - NEEDS CORRECTION AFTER ARRANGEMENTS ABOUT PRND !!!!!
+	filterConfig.FilterMode = CAN_FILTERMODE_IDLIST; // list mode
+	filterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
+	filterConfig.FilterFIFOAssignment = CAN_RX_FIFO0; // messages will go to FIFO0
+	filterConfig.FilterActivation = ENABLE; // turning on the filter
+
+
+	//FILTER 1 - CHARGER (Extended ID: 0x1806E5F4) -> BANK 0
+	filterConfig.FilterBank = 0; // choosing bank of filters (0-13)
+
+	//formatting filter frame to get bits on proper positions
+	uint32_t extendedID_Formatted = (0x1806E5F4 << 3) | 4;
+
+	// divide into two 16-bit parts for STM32 registers
+	filterConfig.FilterIdHigh = (extendedID_Formatted >> 16) & 0xFFFF;
+	filterConfig.FilterIdLow  = (extendedID_Formatted & 0xFFFF);
+
+	filterConfig.FilterMaskIdHigh = 0;
+	filterConfig.FilterMaskIdLow  = 0;
+
+	if (HAL_CAN_ConfigFilter(&hcan, &filterConfig) != HAL_OK) {
+	  Error_Handler();
+	}
+
+	// FILTER 2 - JETSON (Standard ID: 0x200) -> BANK 1
+	filterConfig.FilterBank = 1;
+
+	filterConfig.FilterIdHigh = (0x200 << 5);
+	filterConfig.FilterIdLow  = 0;
+
+	filterConfig.FilterMaskIdHigh = 0;
+	filterConfig.FilterMaskIdLow  = 0;
+
+	if (HAL_CAN_ConfigFilter(&hcan, &filterConfig) != HAL_OK) {
+		Error_Handler();
+	}
+
+
+	if (HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK)
+	{
+	Error_Handler();
+	}
+
+	if ( HAL_CAN_Start(&hcan) != HAL_OK)
+	{
+	Error_Handler();
+	}
+
+	HAL_NVIC_EnableIRQ(CAN_RX0_IRQn);
+
+//limiting communication speed to 20m
+const int interval = 20;
+int lastTick = 0;
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin); // miganie diodą
-    //Dodać timer opóźniający
-    HAL_Delay(200);
-    if (isADC1finished && isADC2finished)
+	  s
+  int currentTick = HAL_GetTick();
+
+    if (isADC1finished && isADC2finished && currentTick - lastTick >= interval )
         {
     		isADC1finished = 0;
     		isADC2finished = 0;
 
-          	TxData[0] = steerValue(ADC1_VAL[2]);;
-			TxData[1] = brakePistonsValue(ADC1_VAL[1], ADC2_VAL[1]);
-			TxData[2] = brakeHallValue(ADC2_VAL[2]);
-			TxData[3] = accelPedalValue(ADC1_VAL[0], ADC2_VAL[0]);
-
-
-
-			if (HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailBox) != HAL_OK)
-			{
-			  Error_Handler();
-			}
+    		stateActions();  //decides about what state currently device should be in
+			lastTick = HAL_GetTick();
           }
-
-
         }
-    }
+  }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -234,12 +296,11 @@ void Error_Handler(void)
   while (1)
   {
 	  HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-	  HAL_Delay(50);
+	  HAL_Delay(200);
   }
   /* USER CODE END Error_Handler_Debug */
 }
-
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.

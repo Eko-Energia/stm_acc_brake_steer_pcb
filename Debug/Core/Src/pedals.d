@@ -28,7 +28,9 @@ Core/Src/pedals.o: ../Core/Src/pedals.c ../Core/Inc/pedals.h \
  ../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal_i2c_ex.h \
  ../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal_pwr.h \
  ../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal_pwr_ex.h \
- ../Core/Inc/pedals_const_val.h ../Core/Inc/adc.h
+ ../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal_tim.h \
+ ../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal_tim_ex.h \
+ ../Core/Inc/pedals_const_val.h ../Core/Inc/adc.h ../Core/Inc/can.h
 ../Core/Inc/pedals.h:
 ../Core/Inc/adc.h:
 ../Core/Inc/main.h:
@@ -60,5 +62,8 @@ Core/Src/pedals.o: ../Core/Src/pedals.c ../Core/Inc/pedals.h \
 ../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal_i2c_ex.h:
 ../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal_pwr.h:
 ../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal_pwr_ex.h:
+../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal_tim.h:
+../Drivers/STM32F3xx_HAL_Driver/Inc/stm32f3xx_hal_tim_ex.h:
 ../Core/Inc/pedals_const_val.h:
 ../Core/Inc/adc.h:
+../Core/Inc/can.h:
