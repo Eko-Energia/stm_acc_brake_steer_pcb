@@ -12,6 +12,13 @@ RM := rm -rf
 -include Drivers/STM32F3xx_HAL_Driver/Src/subdir.mk
 -include Core/Startup/subdir.mk
 -include Core/Src/subdir.mk
+-include App/Src/subdir.mk
+-include App/EKO_Drivers/PWM/Src/subdir.mk
+-include App/EKO_Drivers/LED/Src/subdir.mk
+-include App/EKO_Drivers/I2C/Src/subdir.mk
+-include App/EKO_Drivers/Error_Corrutines/Src/subdir.mk
+-include App/EKO_Drivers/CAN/Src/subdir.mk
+-include App/EKO_Drivers/ADC/Src/subdir.mk
 -include objects.mk
 
 ifneq ($(MAKECMDGOALS),clean)
