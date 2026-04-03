@@ -6,7 +6,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2025 STMicroelectronics.
+  * Copyright (c) 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -26,7 +26,17 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "pedals.h"
+#include "vehicle_types.h"
+#include "can_bus.h"
+#include "engine_control.h"
+#include "vehicle_fsm.h"
+#include "pedals_config.h"
+#include "sensors.h"
+
+/* @brief Used EKO drivers. */
+#include "error_handler.h"
+#include "can_driver.h"
+#include "led_driver.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -48,40 +58,22 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-uint16_t ADC1_VAL[3];
-uint16_t ADC2_VAL[3];
+
+/** @brief Structure used to initialize CAN driver */
+struct CAN_scheduledMsgList canScheduler = {0};
+
+/** @brief Global Error Handler Object */
+EH_HandleTypeDef heh;
 
 
-uint8_t TxData[8];
-uint8_t TxDataTH[8]={0};
-uint8_t TxDataNMT[2]={0};
-
-uint16_t tempTH =0;
-
-CAN_TxHeaderTypeDef TxHeader;
-uint32_t TxMailBox;
-
-CAN_TxHeaderTypeDef TxHeaderTH, TxHeaderNMT;
-
-volatile VehicleState_t Vehicle = {
-    .Charger = {
-        .RawStatus = 1,
-        .IsConnected = false,
-        .LastMsgTick = 0
-    },
-    .Jetson = {0}
+struct LED statusLed = {
+		.GPIO_Port = LED_RED_GPIO_Port,
+		.GPIO_Pin = LED_RED_Pin
 };
+
 
 extern TIM_HandleTypeDef htim2;
 
-//"CONTROL" signal from frame 0x1806E5F4 (dec:403105268)
-const CAN_Signal_Config_t SIG_CHARGER_CONTROL = {
-    .startBit = 32,
-    .length = 8,
-    .factor = 1.0f,
-    .offset = 0.0f,
-    .isSigned = false
-};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -94,15 +86,6 @@ void SystemClock_Config(void);
 /* USER CODE BEGIN 0 */
 
 
-
-//
-//void getEncoderData(uint8_t *data)
-//{
-//	data = TxData;
-//}
-
-
-
 /* USER CODE END 0 */
 
 /**
@@ -112,120 +95,81 @@ void SystemClock_Config(void);
 int main(void)
 {
 
-	/* USER CODE BEGIN 1 */
+  /* USER CODE BEGIN 1 */
 
-	/* USER CODE END 1 */
+  /* USER CODE END 1 */
 
-	/* MCU Configuration--------------------------------------------------------*/
+  /* MCU Configuration--------------------------------------------------------*/
 
-	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-	HAL_Init();
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
 
-	/* USER CODE BEGIN Init */
+  /* USER CODE BEGIN Init */
 
-	/* USER CODE END Init */
+  /* USER CODE END Init */
 
-	/* Configure the system clock */
-	SystemClock_Config();
+  /* Configure the system clock */
+  SystemClock_Config();
 
-	/* USER CODE BEGIN SysInit */
+  /* USER CODE BEGIN SysInit */
 
-	/* USER CODE END SysInit */
+  /* USER CODE END SysInit */
 
-	/* Initialize all configured peripherals */
-	MX_GPIO_Init();
-	MX_DMA_Init();
-	MX_ADC2_Init();
-	MX_CAN_Init();
-	MX_ADC1_Init();
-	MX_TIM2_Init();
-	/* USER CODE BEGIN 2 */
-	HAL_TIM_Base_Start_IT(&htim2);
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_DMA_Init();
+  MX_ADC2_Init();
+  MX_CAN_Init();
+  MX_ADC1_Init();
+  MX_TIM2_Init();
+  /* USER CODE BEGIN 2 */
 
-	HAL_ADC_Start_DMA(&hadc2, (uint32_t*)ADC2_VAL, 3);
+  /* @brief Timer 2 initialization. */
 
-	HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC1_VAL, 3);
-
-
-
-	//---------------- FILTER CONFIGURATION -------------------
-	CAN_FilterTypeDef filterConfig;
-
-	filterConfig.SlaveStartFilterBank = 14; // dont care (only matters when > 1 CAN)
-
-
-	// CAN filter config - NEEDS CORRECTION AFTER ARRANGEMENTS ABOUT PRND !!!!!
-	filterConfig.FilterMode = CAN_FILTERMODE_IDLIST; // list mode
-	filterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
-	filterConfig.FilterFIFOAssignment = CAN_RX_FIFO0; // messages will go to FIFO0
-	filterConfig.FilterActivation = ENABLE; // turning on the filter
-
-
-	//FILTER 1 - CHARGER (Extended ID: 0x1806E5F4) -> BANK 0
-	filterConfig.FilterBank = 0; // choosing bank of filters (0-13)
-
-	//formatting filter frame to get bits on proper positions
-	uint32_t extendedID_Formatted = (0x1806E5F4 << 3) | 4;
-
-	// divide into two 16-bit parts for STM32 registers
-	filterConfig.FilterIdHigh = (extendedID_Formatted >> 16) & 0xFFFF;
-	filterConfig.FilterIdLow  = (extendedID_Formatted & 0xFFFF);
-
-	filterConfig.FilterMaskIdHigh = 0;
-	filterConfig.FilterMaskIdLow  = 0;
-
-	if (HAL_CAN_ConfigFilter(&hcan, &filterConfig) != HAL_OK) {
-	  Error_Handler();
-	}
-
-	// FILTER 2 - JETSON (Standard ID: 0x200) -> BANK 1
-	filterConfig.FilterBank = 1;
-
-	filterConfig.FilterIdHigh = (0x200 << 5);
-	filterConfig.FilterIdLow  = 0;
-
-	filterConfig.FilterMaskIdHigh = 0;
-	filterConfig.FilterMaskIdLow  = 0;
-
-	if (HAL_CAN_ConfigFilter(&hcan, &filterConfig) != HAL_OK) {
-		Error_Handler();
-	}
-
-
-	if (HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK)
+  if (HAL_TIM_Base_Start_IT(&htim2) != HAL_OK)
 	{
 	Error_Handler();
 	}
 
-	if ( HAL_CAN_Start(&hcan) != HAL_OK)
+  /* @brief DMA initialization for ADC2. */
+
+  if (HAL_ADC_Start_DMA(&hadc2, (uint32_t*)ADC2_DMA_Buff, 3 * ADC_SAMPLES) != HAL_OK)
 	{
 	Error_Handler();
 	}
 
-	HAL_NVIC_EnableIRQ(CAN_RX0_IRQn);
+  /* @brief DMA initialization for ADC1. */
 
-//limiting communication speed to 20m
-const int interval = 20;
-int lastTick = 0;
+  if(HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC1_DMA_Buff, 3 * ADC_SAMPLES) != HAL_OK)
+	{
+	Error_Handler();
+	}
 
+	/* @brief Custom CAN filters initialization. (NOT FROM EKO CAN Driver)  */
+	CAN_Custom_Init(&hcan);
+
+	/* @brief Error handler initialization. */
+	EH_init(&heh, &hcan, 64, &canScheduler);
+
+	LED_ChangeState(&statusLed, LED_BLINK);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+/*  @brief Main infinite loop.*/
   while (1)
   {
-	  s
-  int currentTick = HAL_GetTick();
+	  /* @brief Turning on CAN scheduler from EKO CAN Driver. */
+	  CAN_HandleScheduled(&hcan, &canScheduler);
 
-    if (isADC1finished && isADC2finished && currentTick - lastTick >= interval )
-        {
-    		isADC1finished = 0;
-    		isADC2finished = 0;
+	  /* @brief ADC data processing.*/
+	  Process_ADC_Buffers();
 
-    		stateActions();  //decides about what state currently device should be in
-			lastTick = HAL_GetTick();
-          }
-        }
+	  /* @brief Execute vehicle logic. */
+	  stateActions();
+
+  }
   }
     /* USER CODE END WHILE */
 
@@ -236,7 +180,6 @@ int lastTick = 0;
 
 /**
   * @brief System Clock Configuration
-  * @retval None
   */
 void SystemClock_Config(void)
 {
@@ -282,6 +225,138 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 
+
+/**
+  * @brief  Period Elapsed Callback (System Watchdog).
+  * @details Executed by TIM2 interrupt.
+  * Performs safety checks:
+  * 1. **LED Status**: Indicates Charging status.
+  * 2. **PRND Watchdog**: If no frame received for 3000ms -> Shift to neutral gear & Error LED.
+  * 3. **Jetson Watchdog**: If no frame received for 1000ms -> Reset Jetson Data & Flag.
+  * * @param  htim Pointer to TIM handle.
+  */
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim->Instance == TIM2)
+    {
+        uint32_t now = HAL_GetTick();
+
+        /* @brief After 3 seconds from the last received PRND */
+        uint32_t timeout = 3000;
+
+
+        /*
+        bool isChargerTimeout = (now - Vehicle.Charger.LastMsgTick > timeout);
+
+        // --- 1. WATCHDOG (Connection error) ---
+        if (isChargerTimeout)
+        {
+            // Safety logic
+            Vehicle.Charger.IsConnected = false;
+            Vehicle.Charger.RawStatus = STOP_CHARGING;
+
+            if (getEngineFlag() == 1 || getEngineFlag() == 0)
+			{
+				stopEngine();
+				setEngineFlag(ENGINE_STOP_NEUTRAL);
+			}
+
+            // LED TOGGLE signaling error
+            const uint32_t interval = 100;
+            static uint32_t lastTick = 0;
+
+            if (now - lastTick >= interval)
+            {
+                HAL_GPIO_TogglePin(LED_RED_GPIO_Port, LED_RED_Pin);
+                lastTick = now;
+            }
+        }
+        */
+
+        bool isPRNDTimeout = (now - Vehicle.PRND.LastMsgTick > timeout);
+
+		// --- 1. WATCHDOG (Connection error) ---
+		if (isPRNDTimeout)
+		{
+			EH_report(&heh, 0x100, ERROR_SEVERITY_ERROR);
+			// Safety logic
+			Vehicle.PRND.IsConnected = false;
+			Vehicle.PRND.RawStatus = NEUTRAL_GEAR;
+
+			if (getEngineFlag() != ENGINE_STOP_NEUTRAL)
+			{
+				neutralEngine();
+				setEngineFlag(ENGINE_STOP_NEUTRAL);
+
+				// Informing outside world about PRND timeout
+				EH_report(&heh, 0x100, ERROR_SEVERITY_ERROR);
+			}
+
+			// -------- Beginning of LED area ---------
+
+			// Visually signaling no connection with PRND
+
+			if (statusLed.state != LED_FAST_BLINK)
+			{
+				statusLed.state = LED_FAST_BLINK;
+			}
+
+			LED_Handle(&statusLed);
+
+			// -------- End of LED area ---------
+
+		}
+        // --- 2. No error detected - normal state ---
+        else
+        {
+            // Executes only when no timeout detected
+
+        	/*
+        	// SIGNALING CHARGING
+            if (Vehicle.Charger.RawStatus == START_CHARGING)
+            {
+                 HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, 1);
+            }
+            else // SIGNALING STOP CHARGING
+            {
+                 HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, 0);
+            }
+            */
+
+        	/* @brief Clearing the no connection with PRND error. */
+        	EH_clear(&heh, 0x100);
+
+
+			// -------- Beginning of LED area ---------
+
+			// Signaling connection with PRND
+
+			if (statusLed.state != LED_BLINK)
+			{
+				statusLed.state = LED_BLINK;
+			}
+
+			LED_Handle(&statusLed);
+
+			// -------- End of LED area ---------
+
+
+        }
+		// JETSON currently not used
+		/*
+        // --- JETSON WATCHDOG ---
+        if (now - Vehicle.Jetson.LastMsgTick > timeout) {
+            Vehicle.Jetson.IsConnected = false;
+            // Safety Fail-safe: Clear stale data to prevent unintended behavior.
+            // IN OTHER WORDS: Prevent "ghost" inputs. If connection is lost, we must not execute the last received command forever.
+           // memset((void*)Vehicle.Jetson.RawData, 0, 8);		//clears the data received from Jetson
+        }
+        */
+    }
+}
+
+
 /* USER CODE END 4 */
 
 /**
@@ -295,8 +370,7 @@ void Error_Handler(void)
   __disable_irq();
   while (1)
   {
-	  HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-	  HAL_Delay(200);
+	  ;
   }
   /* USER CODE END Error_Handler_Debug */
 }
