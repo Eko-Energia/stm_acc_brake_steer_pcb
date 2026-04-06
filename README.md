@@ -7,6 +7,8 @@ Originally built to read raw data from accelerator, brake, and steering wheel se
 
 Depending on the system state and connectivity, the ECU can either act as a pass-through node for higher-level systems or take direct control of the powertrain—managing inverter states (CANopen NMT), calculating torque requests, and driving the motors independently.
 
+<img width="1000" height="809" alt="image" src="https://github.com/user-attachments/assets/8ed1fd2d-fae2-4b0e-ad46-09418e10e0bb" />
+
 ---
 
 ## 🛡️ Key Features & Safety Mechanisms
