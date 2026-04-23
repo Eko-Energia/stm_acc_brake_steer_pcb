@@ -13,7 +13,7 @@
   */
 
 #include "pedals_map.h"
-#include <pedals_config.h>
+#include <pedals_const_val.h>
 #include "adc.h"
 #include "can.h"
 #include "vehicle_types.h"
@@ -35,14 +35,14 @@
  * @param[in] accel1val Raw ADC value from Accelerator Sensor 1.
  * @param[in] acceptAccelError Maximum allowed difference (threshold) to consider the reading valid.
  *
- * @return int
+ * @return CountedVal_e
  * @retval BAD (0) Check passed (sensors are consistent).
  * @retval GOOD (1) Check failed (divergence exceeds @p acceptAccelError).
  */
-int accelPedalCheck(uint16_t accel2val, uint16_t accel1val, uint8_t acceptAccelError)
+CountedVal_e accelPedalCheck(uint16_t *accel2val, uint16_t *accel1val, uint8_t acceptAccelError)
 {
 	// Calculate difference. accel2val is divided by 2 (2:1 sensor ratio)
-	int32_t pedalCheck = (accel2val * 1000 / SENSOR_ADC_MAX_VALUE / 2 ) - (accel1val * 1000 / SENSOR_ADC_MAX_VALUE);
+	int32_t pedalCheck = (*accel2val * 1000 / SENSOR_ADC_MAX_VALUE / 2 ) - (*accel1val * 1000 / SENSOR_ADC_MAX_VALUE);
 	//int16_t pedalCheck = (accel2val * 1000 / SENSOR_ADC_MAX_VALUE ) - (accel1val * 1000 / SENSOR_ADC_MAX_VALUE); //breadboard test
 	if (abs(pedalCheck) >= acceptAccelError) //value based on accel. pedal documentation
 	{
@@ -50,12 +50,12 @@ int accelPedalCheck(uint16_t accel2val, uint16_t accel1val, uint8_t acceptAccelE
 		uint8_t diagData[4];
 
 		// Sensor 1 (uint16_t) 2 bytes (Little Endian)
-		diagData[0] = (uint8_t)(accel1val & 0xFF);
-		diagData[1] = (uint8_t)((accel1val >> 8) & 0xFF);
+		diagData[0] = (uint8_t)(*accel1val & ACCEL_Msk);
+		diagData[1] = (uint8_t)((*accel1val >> ACCEL_Bitpos) & ACCEL_Msk);
 
 		// Sensor 2 (uint16_t) 2 bytes (Little Endian)
-		diagData[2] = (uint8_t)(accel2val & 0xFF);
-		diagData[3] = (uint8_t)((accel2val >> 8) & 0xFF);
+		diagData[2] = (uint8_t)(*accel2val & ACCEL_Msk);
+		diagData[3] = (uint8_t)((*accel2val >> ACCEL_Bitpos) & ACCEL_Msk);
 
 		// Error report with 4 bytes of data
 		EH_reportEx(&heh, 0x0AC, ERROR_SEVERITY_ERROR, diagData, 4);
@@ -81,26 +81,12 @@ int accelPedalCheck(uint16_t accel2val, uint16_t accel1val, uint8_t acceptAccelE
  * @retval 0-100 Valid pedal position percentage.
  * @retval 0     If a sensor error is detected (Safety fallback).
  */
-uint8_t accelPedalValue(uint16_t accel1val, uint16_t accel2val)
+uint8_t accelPedalValue(uint16_t *accel1val, uint16_t *accel2val)
 {
 	if (!accelPedalCheck(accel1val, accel2val, ACCEPT_ACCEL_ERROR))
 	{
-		/*
-		uint16_t current_accel_val = accel1val;
-		uint8_t accel_percentage_scaled;
-		if (current_accel_val >= SENSOR_ADC_MAX_VALUE)
-		{
-			accel_percentage_scaled = 100;
-			return accel_percentage_scaled;
-		}
-		else
-		{
-			uint32_t temp_calc_accel = ((uint32_t)current_accel_val * 100) + (SENSOR_ADC_MAX_VALUE / 2);
-			accel_percentage_scaled = (uint8_t)(temp_calc_accel / SENSOR_ADC_MAX_VALUE);
-			return accel_percentage_scaled;
-		}
-		*/
-		uint16_t calibrated_val = accel1val;
+
+		uint16_t calibrated_val = *accel1val;
 
 			// Handling dead zones (Min/Max limits)
 		    if (calibrated_val < ACCEL_MIN_VAL) {
@@ -112,11 +98,14 @@ uint8_t accelPedalValue(uint16_t accel1val, uint16_t accel2val)
 
 		    // Scaling to 0-100% range
 			// Formula: (Value - Min) * 100 / (Max - Min)
+
 		    // Calculate offset
-		    uint32_t val_normalized = calibrated_val - ACCEL_MIN_VAL;
+		    // + Safety check to prevent underflow of uint32_t
+		    uint32_t val_normalized = (calibrated_val > ACCEL_MIN_VAL) ? (calibrated_val - ACCEL_MIN_VAL) : 0;
 
 		    // Calculate percentage
-		    uint8_t accel_percentage_scaled = (uint8_t)(val_normalized * 100 / ACCEL_RANGE);
+		    // Add half of the divisor (ACCEL_RANGE) for proper integer rounding
+		    uint8_t accel_percentage_scaled = (uint8_t)((val_normalized * 100 + (ACCEL_RANGE / 2)) / ACCEL_RANGE);
 
 		    // ONLY FOR TESTS
 		    if (accel_percentage_scaled > 10)
@@ -151,7 +140,7 @@ uint8_t accelPedalValue(uint16_t accel1val, uint16_t accel2val)
  *
  * @return uint16_t Control value for the engine (0 - 32767).
  */
-uint16_t engineSteer(uint16_t accel1val, uint16_t accel2val)
+uint16_t engineSteer(uint16_t *accel1val, uint16_t *accel2val)
 {
 	uint16_t accelEngine = (float)accelPedalValue(accel1val, accel2val) / 100.0f * 32767;
 	return accelEngine;
@@ -175,24 +164,24 @@ uint16_t engineSteer(uint16_t accel1val, uint16_t accel2val)
  * @param[in] brakePiston2 Raw ADC value from Brake Sensor 2.
  * @param[in] acceptBrakeError Maximum allowed difference (threshold).
  *
- * @return int
+ * @return CountedVal_e
  * @retval 0 Check passed.
  * @retval 1 Check failed.
  */
-int brakePistonsCheck(uint16_t brakePiston1, uint16_t brakePiston2, uint8_t acceptBrakeError)
+CountedVal_e brakePistonsCheck(uint16_t *brakePiston1, uint16_t *brakePiston2, uint8_t acceptBrakeError)
 {
-	int8_t pistonsCheck = (brakePiston1 * 1000) / SENSOR_ADC_MAX_VALUE  - (brakePiston2 * 1000) / SENSOR_ADC_MAX_VALUE;
+	int8_t pistonsCheck = (*brakePiston1 * 1000) / SENSOR_ADC_MAX_VALUE  - (*brakePiston2 * 1000) / SENSOR_ADC_MAX_VALUE;
 	if (abs(pistonsCheck) > acceptBrakeError)
 	{
 		// Report Accelerator Implausibility Error to the CAN network
 		uint8_t diagData[4];
 		// Sensor 1 (uint16_t) 2 bytes (Little Endian)
-		diagData[0] = (uint8_t)(brakePiston1 & 0xFF);
-		diagData[1] = (uint8_t)((brakePiston1 >> 8) & 0xFF);
+		diagData[0] = (uint8_t)(*brakePiston1 & BRAKE_Msk);
+		diagData[1] = (uint8_t)((*brakePiston1 >> BRAKE_Bitpos) & BRAKE_Msk);
 
 		// Sensor 2 (uint16_t) 2 bytes (Little Endian)
-		diagData[2] = (uint8_t)(brakePiston2 & 0xFF);
-		diagData[3] = (uint8_t)((brakePiston2 >> 8) & 0xFF);
+		diagData[2] = (uint8_t)(*brakePiston2 & BRAKE_Msk);
+		diagData[3] = (uint8_t)((*brakePiston2 >> BRAKE_Bitpos) & BRAKE_Msk);
 		// Report Brake Sensor Implausibility Error to the CAN network
 		EH_reportEx(&heh, 0x0B, ERROR_SEVERITY_ERROR, diagData, 4);
 		return BAD;
@@ -216,17 +205,18 @@ int brakePistonsCheck(uint16_t brakePiston1, uint16_t brakePiston2, uint8_t acce
  * @retval 0-100 Valid brake percentage.
  * @retval 0     If error detected.
  */
-uint8_t brakePistonsValue(uint16_t brakePiston1, uint16_t brakePiston2)
+uint8_t brakePistonsValue(uint16_t *brakePiston1, uint16_t *brakePiston2)
 {
 	uint8_t brake_piston_percentage_scaled;
 	if (!brakePistonsCheck(brakePiston1, brakePiston2, ACCEPT_BRAKE_ERROR))
 	{
-		uint16_t current_brake_piston_val = brakePiston1;
+		uint16_t current_brake_piston_val = *brakePiston1;
 		if (current_brake_piston_val >= SENSOR_ADC_MAX_VALUE) {
 			brake_piston_percentage_scaled = 100;
 			return brake_piston_percentage_scaled;
 		}
 		else {
+			// Add half of the divisor (SENSOR_ADC_MAX_VALUE) for proper integer rounding
 			uint32_t temp_calc_brake_piston = ((uint32_t)current_brake_piston_val * 100) + (SENSOR_ADC_MAX_VALUE / 2);
 			brake_piston_percentage_scaled = (uint8_t)(temp_calc_brake_piston / SENSOR_ADC_MAX_VALUE);
 			return brake_piston_percentage_scaled;
@@ -256,17 +246,18 @@ uint8_t brakePistonsValue(uint16_t brakePiston1, uint16_t brakePiston2)
  *
  * @return uint8_t Brake position (0-100%).
  */
-uint8_t brakeHallValue(uint16_t brakeHal)
+uint8_t brakeHallValue(uint16_t *brakeHal)
 {
 	uint8_t brake_hall_scaled;
-	if (brakeHal >= SENSOR_ADC_MAX_VALUE)
+	if (*brakeHal >= SENSOR_ADC_MAX_VALUE)
 	{
 		brake_hall_scaled = 100;
 		return brake_hall_scaled;
 	}
 	else
 	{
-		uint32_t temp_hall_brake = ((uint32_t)brakeHal * 100) + (SENSOR_ADC_MAX_VALUE / 2);
+		// Add half of the divisor (SENSOR_ADC_MAX_VALUE) for proper integer rounding
+		uint32_t temp_hall_brake = ((uint32_t)*brakeHal * 100) + (SENSOR_ADC_MAX_VALUE / 2);
 		brake_hall_scaled = (uint8_t)(temp_hall_brake / SENSOR_ADC_MAX_VALUE);
 		return brake_hall_scaled;
 	}
@@ -289,15 +280,16 @@ uint8_t brakeHallValue(uint16_t brakeHal)
  *
  * @return uint8_t Steering position (0-100%).
  */
-uint8_t steerValue(uint16_t steerWheel)
+uint8_t steerValue(uint16_t *steerWheel)
 {
 	uint8_t steer_percentage_scaled;
-	uint16_t current_steer_val = steerWheel;
+	uint16_t current_steer_val = *steerWheel;
 	if (current_steer_val >= SENSOR_ADC_MAX_VALUE) {
 	  steer_percentage_scaled = 100;
 	  return steer_percentage_scaled;
 	  }
 	else {
+	  // Add half of the divisor (SENSOR_ADC_MAX_VALUE) for proper integer rounding
 	  uint32_t temp_calc_steer = ((uint32_t)current_steer_val * 100) + (SENSOR_ADC_MAX_VALUE / 2);
 	  steer_percentage_scaled = (uint8_t)(temp_calc_steer / SENSOR_ADC_MAX_VALUE);
 	  return steer_percentage_scaled;

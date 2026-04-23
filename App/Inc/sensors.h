@@ -16,6 +16,7 @@
 #include "main.h" // Required for ADC_SAMPLES and other system macros
 
 /** * @brief   Array containing averaged values from ADC1.
+ *
  * @details Index 0: Accelerator Pedal 1
  * Index 1: Brake Pressure 1
  * Index 2: Steering Angle
@@ -23,6 +24,7 @@
 extern uint16_t ADC1_VAL[3];
 
 /** * @brief   Array containing averaged values from ADC2 (Redundant sensors).
+ *
  * @details Index 0: Accelerator Pedal 2
  * Index 1: Brake Pressure 2
  * Index 2: Brake Hall Sensor
@@ -41,6 +43,7 @@ extern uint16_t ADC2_DMA_Buff[];
 
 /**
  * @brief   Processes raw ADC DMA buffers to calculate average sensor values.
+ *
  * @details Iterates through the raw samples collected by the DMA controller
  * and computes the arithmetic mean for each channel to filter out
  * signal noise and stabilize the readings.

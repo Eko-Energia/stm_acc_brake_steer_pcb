@@ -60,7 +60,7 @@ extern uint32_t TxMailBox;
  * needs to be sent before sending torque commands.
  * @return uint8_t Current state (@ref ENGINE_RUN or @ref ENGINE_STOP).
  */
-uint8_t getEngineFlag();
+uint8_t getEngineFlag(void);
 
 /**
  * @brief  Updates the internal engine state flag.
@@ -74,21 +74,21 @@ void setEngineFlag(uint8_t engineFlag);
  * @details Transmits `0x01` on ID 0x000. This enables the inverter's power stage
  * and allows it to process torque commands.
  */
-void startEngine();
+void startEngine(void);
 
 /**
  * @brief  Sends the "Pre-Operational" NMT command to the inverter.
  * @details Transmits `0x02` on ID 0x0.
  * This disables and blocks the inverter output immediately.
  */
-void stopEngine();
+void stopEngine(void);
 
 /**
  * @brief  Sends the " "Pre-Operational" NMT command to the inverter.
  * @details Transmits 0x80 depending on protocol on ID 0x0.
  * This disables the inverter output immediately without blocking it.
  */
-void neutralEngine();
+void neutralEngine(void);
 
 
 #endif

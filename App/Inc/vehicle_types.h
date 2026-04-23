@@ -20,6 +20,7 @@
 /**
  * @struct VehicleState_t
  * @brief  Master structure collecting all information about the vehicle's subsystems.
+ *
  * @details This structure is typically instantiated as a global volatile variable
  * to be accessible by ISRs and the main loop.
  */

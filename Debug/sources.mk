@@ -22,12 +22,9 @@ C_DEPS :=
 
 # Every subdirectory with source files must be described here
 SUBDIRS := \
-App/EKO_Drivers/ADC/Src \
 App/EKO_Drivers/CAN/Src \
 App/EKO_Drivers/Error_Corrutines/Src \
-App/EKO_Drivers/I2C/Src \
 App/EKO_Drivers/LED/Src \
-App/EKO_Drivers/PWM/Src \
 App/Src \
 Core/Src \
 Core/Startup \

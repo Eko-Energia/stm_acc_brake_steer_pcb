@@ -29,7 +29,7 @@ CAN_TxHeaderTypeDef TxHeaderNMT;
 
 
 /** @brief Configuration for extracting the "CONTROL" signal from the Charger CAN frame. */
-const CAN_Signal_Config_t SIG_CHARGER_CONTROL = {
+const CAN_SignalConfig_t SIG_CHARGER_CONTROL = {
     .startBit = 32,
     .length = 8,
     .factor = 1.0f,
@@ -38,7 +38,7 @@ const CAN_Signal_Config_t SIG_CHARGER_CONTROL = {
 };
 
 /** @brief Configuration for extracting the "CONTROL" signal from the PRND CAN frame. */
-const CAN_Signal_Config_t SIG_PRND_CONTROL = {
+const CAN_SignalConfig_t SIG_PRND_CONTROL = {
     .startBit = 32,
     .length = 8,
     .factor = 1.0f,
@@ -49,19 +49,22 @@ const CAN_Signal_Config_t SIG_PRND_CONTROL = {
 
 /**
  * @brief  Extracts a physical signal value from a raw CAN frame based on configuration.
+ *
  * * @details This function interprets a specific sequence of bits within the 8-byte
  * CAN payload as a number (signed or unsigned), applies a scaling factor
  * and an offset, and returns the physical value (e.g., voltage, speed).
+ *
  * * @param[in]  frameData Pointer to the 8-byte raw data buffer from the CAN frame.
  * @param[in]  config    Structure containing signal parameters (start bit, length,
  * factor, offset, signedness).
  * @param[out] outValue  Pointer to a float variable where the result will be stored.
  * * @return bool
+ *
  * @retval true  Signal extracted successfully.
  * @retval false Input pointers were NULL.
  */
-bool CAN_ExtractSignal(const uint8_t* frameData, CAN_Signal_Config_t config, float* outValue) {
-    if (frameData == NULL || outValue == NULL) {	// performing check to make sure used variables are not empty
+bool CAN_ExtractSignal(const uint8_t* frameData, const CAN_SignalConfig_t *config, float* outValue) {
+    if ( NULL == frameData || NULL == outValue) {	// performing check to make sure used variables are not empty
         return false;
     }
 
@@ -71,37 +74,40 @@ bool CAN_ExtractSignal(const uint8_t* frameData, CAN_Signal_Config_t config, flo
     memcpy(&raw64, frameData, 8);
 
     // Create a mask for the specific bit length
-    uint64_t mask = (1ULL << config.length) - 1;
+    uint64_t mask = (1ULL << config->length) - 1;
 
     // Shift and mask to get the raw integer value
-    uint64_t rawValue = (raw64 >> config.startBit) & mask;
+    uint64_t rawValue = (raw64 >> config->startBit) & mask;
 
     // Handle signed numbers
-    if (config.isSigned) {
+    if (config->isSigned) {
     	// Check if the sign bit is set
-        if (rawValue & (1ULL << (config.length - 1))) {
+        if (rawValue & (1ULL << (config->length - 1))) {
             rawValue |= ~mask; // Sign extension
         }
 
         int64_t signedRaw = (int64_t)rawValue;
-        *outValue = (float)signedRaw * config.factor + config.offset;
+        *outValue = (float)signedRaw * config->factor + config->offset;
 
     } else {
     	// Unsigned calculation
-        *outValue = (float)rawValue * config.factor + config.offset;
+        *outValue = (float)rawValue * config->factor + config->offset;
     }
 
     return true;
 }
 /**
  * @brief  Processes a received CAN frame and updates the Vehicle state.
+ *
  * * @details This function checks the CAN ID of the incoming message and routes
  * the data to the appropriate part of the global @ref Vehicle structure.
  * It handles:
  * - Charger status (ExtID: 0x1806E5F4)
  * - Jetson data (StdID: 0x200)
+ *
  * * @param[in] pHeader Pointer to the CAN Rx Header structure containing ID, IDE, DLC, etc.
  * @param[in] data    Pointer to the payload data (8 bytes).
+ *
  * * @note   Updates the `LastMsgTick` for connection watchdog monitoring.
  */
 void CAN_ProcessFrame(CAN_RxHeaderTypeDef *pHeader, uint8_t* data) {
@@ -110,7 +116,7 @@ void CAN_ProcessFrame(CAN_RxHeaderTypeDef *pHeader, uint8_t* data) {
     if (pHeader->IDE == CAN_ID_EXT && pHeader->ExtId == 0x1806E5F4) {
         float val;
         // processing signal CONTROL
-        if (CAN_ExtractSignal(data, SIG_CHARGER_CONTROL, &val)) {
+        if (CAN_ExtractSignal(data, &SIG_CHARGER_CONTROL, &val)) {
             Vehicle.Charger.RawStatus = (uint8_t)val;
             Vehicle.Charger.LastMsgTick = HAL_GetTick();
             Vehicle.Charger.IsConnected = true;
@@ -131,7 +137,7 @@ void CAN_ProcessFrame(CAN_RxHeaderTypeDef *pHeader, uint8_t* data) {
     //	assuming random id for tests
     if (pHeader-> IDE == CAN_ID_STD && pHeader->StdId == 0x420){
     	float val;
-    	if (CAN_ExtractSignal(data, SIG_PRND_CONTROL, &val))
+    	if (CAN_ExtractSignal(data, &SIG_PRND_CONTROL, &val))
 		{
     		Vehicle.PRND.RawStatus = (uint8_t)val;
 			Vehicle.PRND.LastMsgTick = HAL_GetTick();
@@ -141,8 +147,10 @@ void CAN_ProcessFrame(CAN_RxHeaderTypeDef *pHeader, uint8_t* data) {
 }
 /**
  * @brief  Rx FIFO 0 message pending callback.
+ *
  * * @details This function is called by the HAL library when a new CAN message
  * arrives in FIFO 0. It retrieves the message and passes it to
+ *
  * @ref CAN_ProcessFrame for logic handling.
  * * @param[in] hcan Pointer to the CAN handle structure.
  */
@@ -157,6 +165,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
 
 /**
  * @brief  Configures custom CAN filters and starts the CAN peripheral.
+ *
  * @details This function sets up the hardware filter banks to accept only
  * specific messages required by the VCU, significantly reducing
  * CPU load. It configures the following filter banks:
@@ -165,6 +174,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
  * - Bank 2: PRND (Standard ID: 0x420)
  * * After configuring the filters to route accepted messages into RX FIFO0,
  * it activates the FIFO0 message pending interrupt and starts the CAN module.
+ *
  * * @note    If any of the HAL CAN configuration functions fail, this function
  * will block execution by calling Error_Handler().
  *
@@ -255,6 +265,6 @@ void CAN_Custom_Init(CAN_HandleTypeDef *hcan) {
 	TxHeader.StdId = 0x41;     // 65 (decimal)
 	TxHeader.IDE = CAN_ID_STD;
 	TxHeader.RTR = CAN_RTR_DATA;
-	TxHeader.DLC = 8;
+	TxHeader.DLC = 4;
 }
 

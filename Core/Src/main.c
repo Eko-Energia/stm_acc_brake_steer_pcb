@@ -30,7 +30,7 @@
 #include "can_bus.h"
 #include "engine_control.h"
 #include "vehicle_fsm.h"
-#include "pedals_config.h"
+#include "pedals_const_val.h"
 #include "sensors.h"
 
 /* @brief Used EKO drivers. */
@@ -180,6 +180,7 @@ int main(void)
 
 /**
   * @brief System Clock Configuration
+  * @retval None
   */
 void SystemClock_Config(void)
 {

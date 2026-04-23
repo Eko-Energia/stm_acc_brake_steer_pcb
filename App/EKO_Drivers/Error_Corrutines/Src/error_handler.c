@@ -306,7 +306,7 @@ static void haltNode(EH_HandleTypeDef *hehandler)
 		// Since we have hehandler, we use it.
 		if (hehandler->scheduler != NULL && hehandler->phcan != NULL)
 		{
-			CAN_process(hehandler->phcan, hehandler->scheduler);
+			CAN_HandleScheduled(hehandler->phcan, hehandler->scheduler);
 		}
 	}
 }

@@ -22,6 +22,14 @@
 #include "vehicle_types.h"
 #include "error_handler.h"
 
+#define ACCEL_Msk (0xFF)
+#define ACCEL_Bitpos (8)
+
+#define BRAKE_Msk (0xFF)
+#define BRAKE_Bitpos (8)
+
+
+
 // Import the global Error Handler object defined in main.c
 extern EH_HandleTypeDef heh;
 
@@ -36,23 +44,23 @@ extern EH_HandleTypeDef heh;
  * * @param[in] accel1val Raw ADC value from Sensor 1.
  * @param[in] accel2val Raw ADC value from Sensor 2.
  * @param[in] acceptAccelError Max allowable difference threshold.
- * * @return int
+ * * @return CountedVal_e
  * @retval GOOD (0) Sensors are consistent (OK).
  * @retval BAD (1) Discrepancy detected (Error).
  */
 
-int accelPedalCheck(uint16_t accel1val, uint16_t accel2val, uint8_t acceptAccelError);
+CountedVal_e accelPedalCheck(uint16_t *accel1val, uint16_t *accel2val, uint8_t acceptAccelError);
 
 /**
  * @brief  Checks consistency between two brake piston pressure sensors.
  * * @param[in] brakePiston1 Raw ADC value from Sensor 1.
  * @param[in] brakePiston2 Raw ADC value from Sensor 2.
  * @param[in] acceptBrakeError Max allowable difference threshold.
- * * @return int
+ * * @return CountedVal_e
  * @retval GOOD (0) Sensors are consistent (OK).
  * @retval BAD (1) Discrepancy detected (Error).
  */
-int brakePistonsCheck(uint16_t brakePiston1, uint16_t brakePiston2, uint8_t acceptBrakeError);
+CountedVal_e brakePistonsCheck(uint16_t *brakePiston1, uint16_t *brakePiston2, uint8_t acceptBrakeError);
 
 // ============================================================================
 // SIGNAL MAPPING & SCALING
@@ -64,7 +72,7 @@ int brakePistonsCheck(uint16_t brakePiston1, uint16_t brakePiston2, uint8_t acce
  * * @param[in] brakeHall Raw ADC value from the Hall sensor.
  * @return uint8_t Brake position in percentage (0-100).
  */
-uint8_t brakeHallValue(uint16_t brakeHall);
+uint8_t brakeHallValue(uint16_t *brakeHall);
 
 /**
  * @brief  Calculates the accelerator pedal position.
@@ -74,7 +82,7 @@ uint8_t brakeHallValue(uint16_t brakeHall);
  * @param[in] accel2val Raw ADC value from Sensor 2.
  * @return uint8_t Throttle position in percentage (0-100). Returns 0 on error.
  */
-uint8_t accelPedalValue(uint16_t accel1val, uint16_t accel2val);
+uint8_t accelPedalValue(uint16_t *accel1val, uint16_t *accel2val);
 
 /**
  * @brief  Calculates the brake pressure percentage.
@@ -83,7 +91,7 @@ uint8_t accelPedalValue(uint16_t accel1val, uint16_t accel2val);
  * @param[in] brakePiston2 Raw ADC value from Sensor 2.
  * @return uint8_t Brake pressure in percentage (0-100). Returns 0 on error.
  */
-uint8_t brakePistonsValue(uint16_t brakePiston1, uint16_t brakePiston2);
+uint8_t brakePistonsValue(uint16_t *brakePiston1, uint16_t *brakePiston2);
 
 /**
  * @brief  Calculates the steering wheel position.
@@ -91,7 +99,7 @@ uint8_t brakePistonsValue(uint16_t brakePiston1, uint16_t brakePiston2);
  * * @param[in] steerVal Raw ADC value from steering angle sensor.
  * @return uint8_t Steering position in percentage (0-100).
  */
-uint8_t steerValue(uint16_t steerVal);
+uint8_t steerValue(uint16_t *steerVal);
 /**
  * @brief  Calculates the final engine control command.
  * @details Converts the accelerator pedal position (0-100%) into the
@@ -100,6 +108,6 @@ uint8_t steerValue(uint16_t steerVal);
  * @param[in] accel2val Raw ADC value from Sensor 2.
  * @return uint16_t Torque/Speed command value (Range: 0 - 32767).
  */
-uint16_t engineSteer(uint16_t accel1val, uint16_t accel2val);
+uint16_t engineSteer(uint16_t *accel1val, uint16_t *accel2val);
 
 #endif

@@ -19,24 +19,38 @@
 #include "engine_control.h"
 #include "can_driver.h"
 
+#define TH_mask (0xFF)
+#define TH_bitpos (8)
+#define NMTcommands (2)
+
+/** @brief Macros for data[] indexing in Jetson_GetData function.
+ * */
+#define steerValIndex (0)
+#define brakePistonsValIndex (1)
+#define brakeHallValIndex (2)
+#define accelPedalValIndex (3)
 /**
  * @brief  Global Vehicle State Object.
+ *
  * @details Centralized structure holding the current status and connection health
  * of critical subsystems (Charger, Jetson, PRND). Declared as 'volatile' to
  * guarantee safe, unoptimized memory access across the main loop and asynchronous
  * interrupts (e.g., TIM2 Watchdog).
+ *
  * @note   Actual memory allocation (definition) is located in vehicle_fsm.c.
  */
 extern volatile VehicleState_t Vehicle;
 
 /**
  * @brief  External reference to the global CAN message scheduler.
+ *
  * @details This structure manages the queue of periodic CAN transmissions.
  * It is physically defined in main.c and processed continuously
  * in the main background loop by the CAN driver.
  * It is exposed here so the Finite State Machine (FSM) can dynamically
  * add or remove periodic messages (e.g., Jetson status, Engine throttle)
  * based on the current vehicle state.
+ *
  * * @note    Do not modify this structure directly. Always use the driver API
  * functions (CAN_addScheduledMessage, CAN_removeScheduledMessage)
  * to interact with the scheduler.
@@ -97,7 +111,7 @@ extern CAN_TxHeaderTypeDef TxHeaderTHR, TxHeaderTHL, TxHeaderNMT;
  * @brief Specific Transmit Buffer for NMT commands (2 bytes).
  * Payload: 0x01 (Start) or 0x02 (Stop).
  */
-extern uint8_t TxDataNMT[2];
+extern uint8_t TxDataNMT[NMTcommands];
 
 /**
  * @brief Global Vehicle State Object.
@@ -112,21 +126,25 @@ extern volatile VehicleState_t Vehicle;
 
 /**
  * @brief  Calculates the next state of the vehicle's Finite State Machine.
+ *
  * @details Evaluates connectivity flags (Jetson, Charger) and priorities to
  * determine the operating mode.
+ *
  * @return MachineState_e The resolved state.
  */
-MachineState_e machineState();
+MachineState_e machineState(void);
 
 /**
  * @brief  Executes the control logic for the current state.
+ *
  * @details This function should be called cyclically (e.g., every 20ms).
  * It handles data acquisition, processing, and CAN transmission.
  */
-void stateActions();
+void stateActions(void);
 
 /**
  * @brief  Callback function to populate the Jetson periodic CAN frame.
+ *
  * @details This function is invoked automatically by the CAN message scheduler
  * right before transmitting the status message to the autonomous computer (Jetson).
  * It reads the latest raw ADC values from the hardware buffers, applies
@@ -146,6 +164,7 @@ void Jetson_GetData(uint8_t *data, void *context);
 
 /**
  * @brief  Callback function to populate the Engine/Inverter periodic CAN frame.
+ *
  * @details This function is invoked automatically by the CAN message scheduler
  * right before transmitting the torque/throttle command to the motor controller.
  * It calculates the required torque based on redundant accelerator pedal

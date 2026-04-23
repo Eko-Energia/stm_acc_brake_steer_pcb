@@ -35,7 +35,7 @@ extern volatile VehicleState_t Vehicle;
 
 
 /**
- * @struct CAN_Signal_Config_t
+ * @struct CAN_SignalConfig_t
  * @brief  Configuration structure for extracting a single signal from a CAN frame.
  * @details Describes how to interpret a specific sequence of bits within the
  * 8-byte data field. Corresponds to signal definitions found in .DBC files.
@@ -46,17 +46,17 @@ typedef struct {
 	    float 		factor;         /**< Scaling factor. Physical = (Raw * Factor) + Offset. */
 	    float 		offset;			/**< Offset value. Physical = (Raw * Factor) + Offset. */
 	    bool 		isSigned;       /**< True if the raw value is a signed integer (Two's complement). */
-} CAN_Signal_Config_t;
+} CAN_SignalConfig_t;
 
 /**
  * @brief Configuration for the "CONTROL" signal from the Charger.
  * Frame ID: 0x1806E5F4 (Extended).
  * Contains status bits defining if charging is active.
  */
-extern const CAN_Signal_Config_t SIG_CHARGER_CONTROL;
+extern const CAN_SignalConfig_t SIG_CHARGER_CONTROL;
 
 
-extern const CAN_Signal_Config_t SIG_PRND_CONTROL;
+extern const CAN_SignalConfig_t SIG_PRND_CONTROL;
 /**
  * @brief  Extracts a physical value from a raw CAN frame payload.
  * @details Unpacks bits based on the provided configuration, handles sign extension
@@ -68,7 +68,7 @@ extern const CAN_Signal_Config_t SIG_PRND_CONTROL;
  * @retval true  Extraction successful.
  * @retval false Input pointers were NULL.
  */
-bool CAN_ExtractSignal(const uint8_t* frameData, CAN_Signal_Config_t config, float* outValue);
+bool CAN_ExtractSignal(const uint8_t* frameData, const CAN_SignalConfig_t *config, float* outValue);
 
 /**
  * @brief  Processes a received CAN frame and updates the global Vehicle structure.

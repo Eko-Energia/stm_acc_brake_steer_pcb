@@ -33,6 +33,7 @@ uint8_t getEngineFlag()
 }
 /**
  * @brief  Sets the internal state of the engine.
+ *
  * @details This function updates the local flag used by the FSM to track
  * whether the start/stop command has already been sent.
  * @param[in] engineFlag The new state to set (e.g., @ref ENGINE_RUN).
@@ -43,6 +44,7 @@ void setEngineFlag(uint8_t engineFlag)
 }
 /**
  * @brief  Sends the NMT Start Command to the inverter via CAN.
+ *
  * @details Sets the NMT payload to `0x01` (Enter Operational Mode).
  * This command is required to enable the inverter to accept torque/throttle commands.
  * * @note   Uses the global `TxHeaderNMT` (ID 0x0).
@@ -63,6 +65,7 @@ void startEngine()
 // We have to test the engines in order to confirm the statement below
 /**
  * @brief  Sends the NMT Stop Command to the inverter via CAN.
+ *
  * @details Sets the NMT payload to `0x02` to block the inverter.
  * This safely disables the motor output ensuring safe stop.
  * * @note   Uses the global `TxHeaderNMT`.

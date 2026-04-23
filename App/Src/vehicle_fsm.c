@@ -114,10 +114,10 @@ MachineState_e machineState()
 
 void Jetson_GetData(uint8_t *data, void *context) {
     // This function is triggered automatically in the background right before sending the JETSON frame
-    data[0] = steerValue(ADC1_VAL[2]);
-    data[1] = brakePistonsValue(ADC1_VAL[1], ADC2_VAL[1]);
-    data[2] = brakeHallValue(ADC2_VAL[2]);
-    data[3] = accelPedalValue(ADC1_VAL[0], ADC2_VAL[0]);
+    data[steerValIndex] 		= steerValue(&ADC1_VAL[2]);
+    data[brakePistonsValIndex] 	= brakePistonsValue(&ADC1_VAL[1], &ADC2_VAL[1]);
+    data[brakeHallValIndex] 	= brakeHallValue(&ADC2_VAL[2]);
+    data[accelPedalValIndex] 	= accelPedalValue(&ADC1_VAL[0], &ADC2_VAL[0]);
     // The remaining bytes are zeroed out by the driver itself.
 }
 
@@ -134,6 +134,9 @@ void EngineThrottle_GetData(uint8_t *data, void *context ) {
 	// localTH used for not tampering with the global one
 	int16_t localTH = tempTH;
 
+
+	// DO NOT REDUCE THESE IF INSTRUCTIONS!
+	// Value for left engine needs to be POSITIVE when PRND is set to REVERSE gear
 	if (LEFT_ENGINE == which_engine)
 	{
 		localTH = -localTH;
@@ -144,8 +147,8 @@ void EngineThrottle_GetData(uint8_t *data, void *context ) {
     	localTH = -localTH;
     }
 
-    data[0] = (uint8_t)localTH & 0xFF;           // LSB
-    data[1] = (uint8_t)(localTH >> 8) & 0xFF;    // MSB
+    data[0] = (uint8_t)localTH & TH_mask;           // LSB
+    data[1] = (uint8_t)(localTH >> TH_bitpos) & TH_mask;    // MSB
 
 }
 
@@ -171,7 +174,7 @@ void stateActions()
 		currentState == JTSN_DOWN_REVERSE_STATE ||
 		currentState == JTSN_WORKS_DRIVE_STATE)
 	{
-		tempTH = engineSteer(ADC1_VAL[0], ADC2_VAL[0]);
+		tempTH = engineSteer(&ADC1_VAL[0], &ADC2_VAL[0]);
 		//tempTH = engineSteer(800,0);	// test
 	}
 
@@ -189,8 +192,7 @@ void stateActions()
             // --- JETSON WORKING ---
             case JTSN_WORKS_DRIVE_STATE: {
                 struct CAN_scheduledMsg msgJetson = {
-                    .header = TxHeader,        // Configured in main.c (0x100)
-                    .periodMs = 20,            // Send every 20 ms
+                    .header = TxHeader,        // Configured in can_bus.c (0x41)
                     .getData = Jetson_GetData, // Data packing function
                     .context = NULL
                 };
