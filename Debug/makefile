@@ -1,6 +1,6 @@
 ################################################################################
 # Automatically-generated file. Do not edit!
-# Toolchain: GNU Tools for STM32 (12.3.rel1)
+# Toolchain: GNU Tools for STM32 (13.3.rel1)
 ################################################################################
 
 -include ../makefile.init
@@ -12,6 +12,10 @@ RM := rm -rf
 -include Drivers/STM32F3xx_HAL_Driver/Src/subdir.mk
 -include Core/Startup/subdir.mk
 -include Core/Src/subdir.mk
+-include App/Src/subdir.mk
+-include App/EKO_Drivers/LED/Src/subdir.mk
+-include App/EKO_Drivers/Error_Corrutines/Src/subdir.mk
+-include App/EKO_Drivers/CAN/Src/subdir.mk
 -include objects.mk
 
 ifneq ($(MAKECMDGOALS),clean)
@@ -60,8 +64,8 @@ all: main-build
 main-build: perla_pedals_alpha_ver.elf secondary-outputs
 
 # Tool invocations
-perla_pedals_alpha_ver.elf perla_pedals_alpha_ver.map: $(OBJS) $(USER_OBJS) C:\ST_projects\perla_pedals_alpha_ver\STM32F303K8TX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "perla_pedals_alpha_ver.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\ST_projects\perla_pedals_alpha_ver\STM32F303K8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="perla_pedals_alpha_ver.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+perla_pedals_alpha_ver.elf perla_pedals_alpha_ver.map: $(OBJS) $(USER_OBJS) D:\STM32\Workspaces\perla_pedals_alpha_ver\STM32F303K8TX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "perla_pedals_alpha_ver.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"D:\STM32\Workspaces\perla_pedals_alpha_ver\STM32F303K8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="perla_pedals_alpha_ver.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

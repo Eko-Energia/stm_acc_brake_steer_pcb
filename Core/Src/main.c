@@ -6,7 +6,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2025 STMicroelectronics.
+  * Copyright (c) 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -21,14 +21,22 @@
 #include "adc.h"
 #include "can.h"
 #include "dma.h"
+#include "tim.h"
 #include "gpio.h"
-#include "can_driver.h"
-#include "pedals.h"
-#include "pedals_const_val.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "vehicle_types.h"
+#include "can_bus.h"
+#include "engine_control.h"
+#include "vehicle_fsm.h"
+#include "pedals_const_val.h"
+#include "sensors.h"
 
+/* @brief Used EKO drivers. */
+#include "error_handler.h"
+#include "can_driver.h"
+#include "led_driver.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -50,16 +58,21 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-uint16_t ADC1_VAL[3];
-uint16_t ADC2_VAL[3];
+
+/** @brief Structure used to initialize CAN driver */
+struct CAN_scheduledMsgList canScheduler = {0};
+
+/** @brief Global Error Handler Object */
+EH_HandleTypeDef heh;
 
 
-uint8_t TxData[8];
-CAN_TxHeaderTypeDef TxHeader;
-uint32_t TxMailBox;
+struct LED statusLed = {
+		.GPIO_Port = LED_RED_GPIO_Port,
+		.GPIO_Pin = LED_RED_Pin
+};
 
 
-
+extern TIM_HandleTypeDef htim2;
 
 /* USER CODE END PV */
 
@@ -71,15 +84,6 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-
-
-//
-//void getEncoderData(uint8_t *data)
-//{
-//	data = TxData;
-//}
-
 
 
 /* USER CODE END 0 */
@@ -117,54 +121,56 @@ int main(void)
   MX_ADC2_Init();
   MX_CAN_Init();
   MX_ADC1_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-  HAL_ADC_Start_DMA(&hadc2, (uint32_t*)ADC2_VAL, 3);
 
-  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC1_VAL, 3);
+  /* @brief Timer 2 initialization. */
 
+  if (HAL_TIM_Base_Start_IT(&htim2) != HAL_OK)
+	{
+	Error_Handler();
+	}
 
+  /* @brief DMA initialization for ADC2. */
 
-  if ( HAL_CAN_Start(&hcan) != HAL_OK)
-  {
-  Error_Handler();
-  }
-  //can_msg.header.StdId = 0x040;
-  TxHeader.StdId = 0x040; //id ramki
-  TxHeader.RTR = CAN_RTR_DATA; //CAN_RTR_DATA oznacza że nasza ramka będzie przenosić dane, mogłoby być jeszcze CAN_RTR_REMOTE wtedy ramka nie przenosi danych
-  // tylko służy do żądania danych od innego węzła
-  TxHeader.IDE = CAN_ID_STD; //określa czy id jest normalne czy extended
+  if (HAL_ADC_Start_DMA(&hadc2, (uint32_t*)ADC2_DMA_Buff, 3 * ADC_SAMPLES) != HAL_OK)
+	{
+	Error_Handler();
+	}
 
-  TxHeader.DLC = 4; // określa ilość kontenerów w wiadomości
+  /* @brief DMA initialization for ADC1. */
+
+  if(HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC1_DMA_Buff, 3 * ADC_SAMPLES) != HAL_OK)
+	{
+	Error_Handler();
+	}
+
+	/* @brief Custom CAN filters initialization. (NOT FROM EKO CAN Driver)  */
+	CAN_Custom_Init(&hcan);
+
+	/* @brief Error handler initialization. */
+	EH_init(&heh, &hcan, 64, &canScheduler);
+
+	LED_ChangeState(&statusLed, LED_BLINK);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+/*  @brief Main infinite loop.*/
   while (1)
   {
-    HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin); // miganie diodą
-    //Dodać timer opóźniający
-    HAL_Delay(200);
-    if (isADC1finished && isADC2finished)
-        {
-    		isADC1finished = 0;
-    		isADC2finished = 0;
+	  /* @brief Turning on CAN scheduler from EKO CAN Driver. */
+	  CAN_HandleScheduled(&hcan, &canScheduler);
 
-          	TxData[0] = steerValue(ADC1_VAL[2]);;
-			TxData[1] = brakePistonsValue(ADC1_VAL[1], ADC2_VAL[1]);
-			TxData[2] = brakeHallValue(ADC2_VAL[2]);
-			TxData[3] = accelPedalValue(ADC1_VAL[0], ADC2_VAL[0]);
+	  /* @brief ADC data processing.*/
+	  Process_ADC_Buffers();
 
+	  /* @brief Execute vehicle logic. */
+	  stateActions();
 
-
-			if (HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailBox) != HAL_OK)
-			{
-			  Error_Handler();
-			}
-          }
-
-
-        }
-    }
+  }
+  }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -220,6 +226,138 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 
+
+/**
+  * @brief  Period Elapsed Callback (System Watchdog).
+  * @details Executed by TIM2 interrupt.
+  * Performs safety checks:
+  * 1. **LED Status**: Indicates Charging status.
+  * 2. **PRND Watchdog**: If no frame received for 3000ms -> Shift to neutral gear & Error LED.
+  * 3. **Jetson Watchdog**: If no frame received for 1000ms -> Reset Jetson Data & Flag.
+  * * @param  htim Pointer to TIM handle.
+  */
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim->Instance == TIM2)
+    {
+        uint32_t now = HAL_GetTick();
+
+        /* @brief After 3 seconds from the last received PRND */
+        uint32_t timeout = 3000;
+
+
+        /*
+        bool isChargerTimeout = (now - Vehicle.Charger.LastMsgTick > timeout);
+
+        // --- 1. WATCHDOG (Connection error) ---
+        if (isChargerTimeout)
+        {
+            // Safety logic
+            Vehicle.Charger.IsConnected = false;
+            Vehicle.Charger.RawStatus = STOP_CHARGING;
+
+            if (getEngineFlag() == 1 || getEngineFlag() == 0)
+			{
+				stopEngine();
+				setEngineFlag(ENGINE_STOP_NEUTRAL);
+			}
+
+            // LED TOGGLE signaling error
+            const uint32_t interval = 100;
+            static uint32_t lastTick = 0;
+
+            if (now - lastTick >= interval)
+            {
+                HAL_GPIO_TogglePin(LED_RED_GPIO_Port, LED_RED_Pin);
+                lastTick = now;
+            }
+        }
+        */
+
+        bool isPRNDTimeout = (now - Vehicle.PRND.LastMsgTick > timeout);
+
+		// --- 1. WATCHDOG (Connection error) ---
+		if (isPRNDTimeout)
+		{
+			EH_report(&heh, 0x100, ERROR_SEVERITY_ERROR);
+			// Safety logic
+			Vehicle.PRND.IsConnected = false;
+			Vehicle.PRND.RawStatus = NEUTRAL_GEAR;
+
+			if (getEngineFlag() != ENGINE_STOP_NEUTRAL)
+			{
+				neutralEngine();
+				setEngineFlag(ENGINE_STOP_NEUTRAL);
+
+				// Informing outside world about PRND timeout
+				EH_report(&heh, 0x100, ERROR_SEVERITY_ERROR);
+			}
+
+			// -------- Beginning of LED area ---------
+
+			// Visually signaling no connection with PRND
+
+			if (statusLed.state != LED_FAST_BLINK)
+			{
+				statusLed.state = LED_FAST_BLINK;
+			}
+
+			LED_Handle(&statusLed);
+
+			// -------- End of LED area ---------
+
+		}
+        // --- 2. No error detected - normal state ---
+        else
+        {
+            // Executes only when no timeout detected
+
+        	/*
+        	// SIGNALING CHARGING
+            if (Vehicle.Charger.RawStatus == START_CHARGING)
+            {
+                 HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, 1);
+            }
+            else // SIGNALING STOP CHARGING
+            {
+                 HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, 0);
+            }
+            */
+
+        	/* @brief Clearing the no connection with PRND error. */
+        	EH_clear(&heh, 0x100);
+
+
+			// -------- Beginning of LED area ---------
+
+			// Signaling connection with PRND
+
+			if (statusLed.state != LED_BLINK)
+			{
+				statusLed.state = LED_BLINK;
+			}
+
+			LED_Handle(&statusLed);
+
+			// -------- End of LED area ---------
+
+
+        }
+		// JETSON currently not used
+		/*
+        // --- JETSON WATCHDOG ---
+        if (now - Vehicle.Jetson.LastMsgTick > timeout) {
+            Vehicle.Jetson.IsConnected = false;
+            // Safety Fail-safe: Clear stale data to prevent unintended behavior.
+            // IN OTHER WORDS: Prevent "ghost" inputs. If connection is lost, we must not execute the last received command forever.
+           // memset((void*)Vehicle.Jetson.RawData, 0, 8);		//clears the data received from Jetson
+        }
+        */
+    }
+}
+
+
 /* USER CODE END 4 */
 
 /**
@@ -233,13 +371,11 @@ void Error_Handler(void)
   __disable_irq();
   while (1)
   {
-	  HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-	  HAL_Delay(50);
+	  ;
   }
   /* USER CODE END Error_Handler_Debug */
 }
-
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.

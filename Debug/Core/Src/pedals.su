@@ -1,7 +1,0 @@
-../Core/Src/pedals.c:9:5:accelPedalCheck	24	static
-../Core/Src/pedals.c:22:9:accelPedalValue	32	static
-../Core/Src/pedals.c:55:5:brakePistonsCheck	24	static
-../Core/Src/pedals.c:69:9:brakePistonsValue	32	static
-../Core/Src/pedals.c:94:9:brakeHallValue	24	static
-../Core/Src/pedals.c:113:9:steerValue	32	static
-../Core/Src/pedals.c:131:6:HAL_ADC_ConvCpltCallback	16	static
