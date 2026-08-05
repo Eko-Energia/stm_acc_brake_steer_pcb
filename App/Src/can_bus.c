@@ -39,8 +39,8 @@ const CAN_SignalConfig_t SIG_CHARGER_CONTROL = {
 
 /** @brief Configuration for extracting the "CONTROL" signal from the PRND CAN frame. */
 const CAN_SignalConfig_t SIG_PRND_CONTROL = {
-    .startBit = 32,
-    .length = 8,
+    .startBit = 14,
+    .length = 2,
     .factor = 1.0f,
     .offset = 0.0f,
     .isSigned = false
@@ -135,7 +135,7 @@ void CAN_ProcessFrame(CAN_RxHeaderTypeDef *pHeader, uint8_t* data) {
 
     // Checking PRND UNKNOWN ID FIX IT LATER
     //	assuming random id for tests
-    if (pHeader-> IDE == CAN_ID_STD && pHeader->StdId == 0x420){
+    if (pHeader-> IDE == CAN_ID_STD && pHeader->StdId == 0x3e1){
     	float val;
     	if (CAN_ExtractSignal(data, &SIG_PRND_CONTROL, &val))
 		{
@@ -227,7 +227,7 @@ void CAN_Custom_Init(CAN_HandleTypeDef *hcan) {
 
 	// FILTER 3 - PRND (Standard ID: 0x420) -> BANK 2
 	filterConfig.FilterBank = 2;
-	filterConfig.FilterIdHigh = (0x420 << 5);
+	filterConfig.FilterIdHigh = (0x3e1 << 5);
 	filterConfig.FilterIdLow  = 0;
 	filterConfig.FilterMaskIdHigh = 0;
 	filterConfig.FilterMaskIdLow  = 0;

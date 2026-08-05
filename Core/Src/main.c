@@ -71,7 +71,6 @@ struct LED statusLed = {
 		.GPIO_Pin = LED_RED_Pin
 };
 
-
 extern TIM_HandleTypeDef htim2;
 
 /* USER CODE END PV */
@@ -168,7 +167,6 @@ int main(void)
 
 	  /* @brief Execute vehicle logic. */
 	  stateActions();
-
   }
   }
     /* USER CODE END WHILE */
@@ -275,7 +273,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         }
         */
 
-        bool isPRNDTimeout = (now - Vehicle.PRND.LastMsgTick > timeout);
+        // na razie ramka prnd jest wysyłana onEvent
+//        bool isPRNDTimeout = (now - Vehicle.PRND.LastMsgTick > timeout);
+        bool isPRNDTimeout = 0;
 
 		// --- 1. WATCHDOG (Connection error) ---
 		if (isPRNDTimeout)
