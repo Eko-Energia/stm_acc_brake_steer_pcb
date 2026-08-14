@@ -259,6 +259,12 @@ uint8_t brakeHallValue(uint16_t *brakeHal)
 	// Add half of the divisor (BRAKE_HALL_RANGE) for proper integer rounding
 	uint8_t brake_hall_scaled = (uint8_t)((val_normalized * 100 + (BRAKE_HALL_RANGE / 2)) / BRAKE_HALL_RANGE);
 
+	if (brake_hall_scaled > 0) {
+		brakesPressed = true;
+	}
+	else {
+		brakesPressed = false;
+	}
 	return brake_hall_scaled;
 }
 // ============================================================================
