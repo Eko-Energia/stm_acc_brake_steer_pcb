@@ -12,8 +12,7 @@
 #ifndef EH_H
 #define EH_H
 
-#include "main.h"
-#include "can_driver.h"
+#include "../../CAN/Inc/can_driver.h"
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -42,6 +41,9 @@ extern "C"
 
 /** @brief Interval of error message */
 #define ERROR_INTERVAL (300)
+
+/** @brief Maximum number of concurrently active errors */
+#define MAX_ACTIVE_ERRORS (16)
 
 /* ============================================================================
  * Severity Levels
@@ -91,6 +93,17 @@ struct errorFramePayload
  * ============================================================================ */
 
 /**
+ * @brief Active Error Structure
+ */
+typedef struct
+{
+	uint16_t errorCode;
+	errorSeverity_e severity;
+	uint8_t specificData[ERROR_SPECIFIC_DATA_SIZE];
+	uint8_t specificDataLen;
+} EH_ActiveError;
+
+/**
  * @brief Error Handler Handle Structure
  */
 typedef struct
@@ -99,10 +112,9 @@ typedef struct
 	struct CAN_scheduledMsgList *scheduler;                  /**< Pointer to scheduler */
 	uint16_t nodeId;                                         /**< Local Node ID */
 	uint32_t errorFrameId;                                   /**< Calculated Error Frame ID */
-	uint16_t activeErrorCode;                                /**< Active Error Code */
-	errorSeverity_e activeSeverity;                          /**< Active Severity */
-	uint8_t activeSpecificData[ERROR_SPECIFIC_DATA_SIZE];    /**< Specific Data Buffer */
-	uint8_t activeSpecificDataLen;                           /**< Specific Data Length */
+	EH_ActiveError activeErrors[MAX_ACTIVE_ERRORS];          /**< Buffer of active errors */
+	uint8_t activeErrorCount;                                /**< Number of active errors */
+	uint8_t currentTransmitIndex;                            /**< Multiplexing index for CAN transmission */
 	uint8_t isInitialized;                                   /**< Module initialized flag */
 	uint8_t isHalted;                                        /**< Node Halted Flag */
 } EH_HandleTypeDef;
@@ -188,6 +200,21 @@ uint16_t EH_getNodeId(EH_HandleTypeDef *hehandler);
  * @return 1 if initialized, 0 otherwise
  */
 uint8_t EH_isInitialized(EH_HandleTypeDef *hehandler);
+
+/**
+ * @brief Get all active faults
+ */
+uint8_t EH_GetAllActive(EH_HandleTypeDef *hehandler, EH_ActiveError *outArray, uint8_t maxLen);
+
+/**
+ * @brief Get all active errors (severity strict ERROR or SAFE_STATE)
+ */
+uint8_t EH_GetAllActiveErrors(EH_HandleTypeDef *hehandler, EH_ActiveError *outArray, uint8_t maxLen);
+
+/**
+ * @brief Get all active warnings (severity strict WARNING)
+ */
+uint8_t EH_GetAllActiveWarnings(EH_HandleTypeDef *hehandler, EH_ActiveError *outArray, uint8_t maxLen);
 
 #ifdef __cplusplus
 }

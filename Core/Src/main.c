@@ -33,6 +33,7 @@
 #include "pedals_const_val.h"
 #include "sensors.h"
 
+
 /* @brief Used EKO drivers. */
 #include "error_handler.h"
 #include "can_driver.h"
@@ -152,6 +153,7 @@ int main(void)
 	EH_init(&heh, &hcan, 64, &canScheduler);
 
 	LED_ChangeState(&statusLed, LED_BLINK);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -162,6 +164,9 @@ int main(void)
   {
 	  /* @brief Turning on CAN scheduler from EKO CAN Driver. */
 	  CAN_HandleScheduled(&hcan, &canScheduler);
+
+	  /* @brief Processing of CAN frames buffered in the RX interrupt. */
+	  CAN_ProcessIncoming();
 
 	  /* @brief ADC data processing.*/
 	  Process_ADC_Buffers();
@@ -233,6 +238,7 @@ void SystemClock_Config(void)
   * Performs safety checks:
   * 1. **LED Status**: Indicates Charging status.
   * 2. **PRND Watchdog**: If no frame received for 3000ms -> Shift to neutral gear & Error LED.
+  * 3. **Wheel Speed Watchdog**: If no frame received for 1000ms -> Shift to neutral gear & Error LED.
   * 3. **Jetson Watchdog**: If no frame received for 1000ms -> Reset Jetson Data & Flag.
   * * @param  htim Pointer to TIM handle.
   */
@@ -246,7 +252,15 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         /* @brief After 3 seconds from the last received PRND */
         uint32_t timeout = 3000;
 
-
+        /* @brief After 1 second from the last received Wheel Speed */
+        uint32_t timeoutWheelSpeed = 1000;
+       
+        // Checking rear left wheel speed (ID 0x6A1)
+        bool isWheelSpeedRLTimeout = (now - Vehicle.WheelSpeed.LastMsgTickRL > timeoutWheelSpeed);
+      
+        // Checking rear right wheel speed (ID 0x681)
+        bool isWheelSpeedRRTimeout = (now - Vehicle.WheelSpeed.LastMsgTickRR > timeoutWheelSpeed);
+        
         /*
         bool isChargerTimeout = (now - Vehicle.Charger.LastMsgTick > timeout);
 
@@ -278,22 +292,41 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         bool isPRNDTimeout = (now - Vehicle.PRND.LastMsgTick > timeout);
 
 		// --- 1. WATCHDOG (Connection error) ---
-		if (isPRNDTimeout)
+		if (isPRNDTimeout || isWheelSpeedRLTimeout || isWheelSpeedRRTimeout)
 		{
-			EH_report(&heh, 0x100, ERROR_SEVERITY_ERROR);
+      /*
+      if (isPRNDTimeout) {
+			  EH_report(&heh, 0x100, ERROR_SEVERITY_ERROR);
+      }
+
+      if (isWheelSpeedFLTimeout) {
+        EH_report(&heh, 0x101, ERROR_SEVERITY_ERROR);
+      }
+      if (isWheelSpeedFRTimeout) {
+        EH_report(&heh, 0x102, ERROR_SEVERITY_ERROR);
+      }
+      if (isWheelSpeedRLTimeout) {
+        EH_report(&heh, 0x103, ERROR_SEVERITY_ERROR);
+      }
+      if (isWheelSpeedRRTimeout) {
+        EH_report(&heh, 0x104, ERROR_SEVERITY_ERROR);
+      }
+
 			// Safety logic
 			Vehicle.PRND.IsConnected = false;
 			Vehicle.PRND.RawStatus = NEUTRAL_GEAR;
+
+      Vehicle.WheelSpeed.IsConnectedFL = false;
+      Vehicle.WheelSpeed.IsConnectedFR = false;
+      Vehicle.WheelSpeed.IsConnectedRL = false;
+      Vehicle.WheelSpeed.IsConnectedRR = false;
 
 			if (getEngineFlag() != ENGINE_STOP_NEUTRAL)
 			{
 				neutralEngine();
 				setEngineFlag(ENGINE_STOP_NEUTRAL);
-
-				// Informing outside world about PRND timeout
-				EH_report(&heh, 0x100, ERROR_SEVERITY_ERROR);
 			}
-
+*/
 			// -------- Beginning of LED area ---------
 
 			// Visually signaling no connection with PRND
@@ -326,7 +359,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             */
 
         	/* @brief Clearing the no connection with PRND error. */
-        	EH_clear(&heh, 0x100);
+        	// EH_clear(&heh, 0x100);
+
+          // Clearing the no connection with Wheel Speed error.
+          // EH_clear(&heh, 0x101);
+          // EH_clear(&heh, 0x102);
+          // EH_clear(&heh, 0x103);
+          // EH_clear(&heh, 0x104);
 
 
 			// -------- Beginning of LED area ---------

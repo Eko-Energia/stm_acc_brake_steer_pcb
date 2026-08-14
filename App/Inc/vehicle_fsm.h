@@ -147,9 +147,8 @@ void stateActions(void);
  *
  * @details This function is invoked automatically by the CAN message scheduler
  * right before transmitting the status message to the autonomous computer (Jetson).
- * It reads the latest raw ADC values from the hardware buffers, applies
- * signal conditioning/mapping functions, and packs the physical values
- * into the 8-byte payload array.
+ * It only packs already mapped percentages from @ref Vehicle.Pedals.
+ * Mapping itself is done once per cycle in @ref stateActions.
  * * Byte mapping:
  * - Byte 0: Steering angle
  * - Byte 1: Brake pistons pressure

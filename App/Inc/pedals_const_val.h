@@ -18,7 +18,7 @@
  */
 
 /** @brief Amount of samples taken by ADC before averaging. */
-#define ADC_SAMPLES (5)
+#define ADC_SAMPLES (300)
 
 /**
  * @brief Maximum possible value read from the ADC.
@@ -47,7 +47,7 @@
  * @note  Unit: 0.1%. Value 14 represents 1.4% deviation.
  */
 
-#define ACCEPT_ACCEL_ERROR (14)
+#define ACCEPT_ACCEL_ERROR (140)
 
 /** @} */ // End of Safety_Limits
 
@@ -62,13 +62,13 @@
  * @brief Raw ADC value when the accelerator pedal is fully released (0%).
  */
 
-#define ACCEL_MIN_VAL (126)
+#define ACCEL_MIN_VAL (130)
 
 /**
  * @brief Raw ADC value when the accelerator pedal is fully pressed (100%).
  */
 
-#define ACCEL_MAX_VAL (896)
+#define ACCEL_MAX_VAL (890)
 
 /**
  * @brief Calculated working range of the accelerator pedal.
@@ -79,10 +79,46 @@
 
 /** @} */ // End of Accel_Calibration
 
+/**
+ * @defgroup Brake_Hall_Calibration Brake Hall Calibration
+ * @brief    Raw ADC values defining the physical range of the brake Hall sensor.
+ * @note     These values must be updated if the sensor or mechanical mounting changes.
+ * @{
+ */
+
+/**
+ * @brief Raw ADC value when the brake pedal is fully released (0%).
+ */
+#define BRAKE_HALL_MIN_VAL (166)
+
+/**
+ * @brief Raw ADC value when the brake pedal is fully pressed (100%).
+ */
+#define BRAKE_HALL_MAX_VAL (724)
+
+/**
+ * @brief Calculated working range of the brake Hall sensor.
+ * @note  Used for mapping the raw value to a percentage.
+ */
+#define BRAKE_HALL_RANGE (BRAKE_HALL_MAX_VAL - BRAKE_HALL_MIN_VAL) // result: 558
+
+/** @} */ // End of Brake_Hall_Calibration
+
 
 /**
  * @brief Amount of used ADC channels.
  */
 #define AMOUNT_OF_ADC_CHANNELS (3)
+
+/**
+ * @defgroup LPF_Sensor_Calibration LPF Sensor Calibration
+ * @brief    Raw ADC values defining the physical range of the LPF sensor.
+ * @note     These values must be updated if the potentiometer or mechanical mounting changes.
+ * @{
+ */
+#define LPF_SENSOR_ADC_MIN_VALUE (0)
+#define LPF_SENSOR_ADC_MAX_VALUE (1023)
+#define LPF_SENSOR_MM_MIN_VALUE (0)
+#define LPF_SENSOR_MM_MAX_VALUE (175)
 
 #endif /* PEDALS_CONST_H */

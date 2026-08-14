@@ -19,8 +19,9 @@
 #include "vehicle_types.h"
 #include <stdlib.h>
 #include "engine_control.h"
+#include <stdbool.h>
 
-
+bool brakesPressed = false;
 // ============================================================================
 // BEGIN ACCEL. PEDAL SECTION
 // ============================================================================
@@ -42,9 +43,15 @@
 CountedVal_e accelPedalCheck(uint16_t *accel2val, uint16_t *accel1val, uint8_t acceptAccelError)
 {
 	// Calculate difference. accel2val is divided by 2 (2:1 sensor ratio)
-	int32_t pedalCheck = (*accel2val * 1000 / SENSOR_ADC_MAX_VALUE / 2 ) - (*accel1val * 1000 / SENSOR_ADC_MAX_VALUE);
+	 int32_t pedalCheck = (*accel2val * 1000 / SENSOR_ADC_MAX_VALUE / 2 ) - (*accel1val * 1000 / SENSOR_ADC_MAX_VALUE);
+
+	// TEST IT WHETHER IT WORKS
+	//int32_t rawDiff = (int32_t)(*accel2val) - ((int32_t)(*accel1val) * 2);
+
+
 	//int16_t pedalCheck = (accel2val * 1000 / SENSOR_ADC_MAX_VALUE ) - (accel1val * 1000 / SENSOR_ADC_MAX_VALUE); //breadboard test
-	if (abs(pedalCheck) >= acceptAccelError) //value based on accel. pedal documentation
+	 if (abs(pedalCheck) >= acceptAccelError) //value based on accel. pedal documentation
+//	if (abs(rawDiff) >= 1030) // 1% OF 1023
 	{
 		// Report Accelerator Implausibility Error to the CAN network
 		uint8_t diagData[4];
@@ -83,10 +90,10 @@ CountedVal_e accelPedalCheck(uint16_t *accel2val, uint16_t *accel1val, uint8_t a
  */
 uint8_t accelPedalValue(uint16_t *accel1val, uint16_t *accel2val)
 {
-	if (!accelPedalCheck(accel1val, accel2val, ACCEPT_ACCEL_ERROR))
+	if (!accelPedalCheck(accel2val, accel1val, ACCEPT_ACCEL_ERROR) && !brakesPressed)
 	{
 
-		uint16_t calibrated_val = *accel1val;
+		uint16_t calibrated_val = *accel2val;
 
 			// Handling dead zones (Min/Max limits)
 		    if (calibrated_val < ACCEL_MIN_VAL) {
@@ -106,12 +113,6 @@ uint8_t accelPedalValue(uint16_t *accel1val, uint16_t *accel2val)
 		    // Calculate percentage
 		    // Add half of the divisor (ACCEL_RANGE) for proper integer rounding
 		    uint8_t accel_percentage_scaled = (uint8_t)((val_normalized * 100 + (ACCEL_RANGE / 2)) / ACCEL_RANGE);
-
-		    // ONLY FOR TESTS
-		    if (accel_percentage_scaled > 10)
-		    {
-		    	accel_percentage_scaled = 10;
-		    }
 
 		    return accel_percentage_scaled;
 	}
@@ -195,37 +196,26 @@ CountedVal_e brakePistonsCheck(uint16_t *brakePiston1, uint16_t *brakePiston2, u
 
 /**
  * @brief  Calculates brake pressure percentage based on piston sensors.
- * @details Checks for sensor errors first. If valid, maps the raw ADC value
- * to a 0-100% range relative to @ref SENSOR_ADC_MAX_VALUE.
+ * @details Maps the raw ADC value to a 0-100% range relative to
+ * @ref SENSOR_ADC_MAX_VALUE. Plausibility is handled separately by
+ * @ref brakePistonsCheck — do not call it from here, it reports errors
+ * that force the FSM into Neutral and drop periodic CAN frames.
  *
  * @param[in] brakePiston1 Raw ADC value from Brake Sensor 1.
- * @param[in] brakePiston2 Raw ADC value from Brake Sensor 2.
+ * @param[in] brakePiston2 Raw ADC value from Brake Sensor 2 (unused, API kept).
  *
- * @return uint8_t
- * @retval 0-100 Valid brake percentage.
- * @retval 0     If error detected.
+ * @return uint8_t Brake percentage 0-100.
  */
 uint8_t brakePistonsValue(uint16_t *brakePiston1, uint16_t *brakePiston2)
 {
-	uint8_t brake_piston_percentage_scaled;
-	if (!brakePistonsCheck(brakePiston1, brakePiston2, ACCEPT_BRAKE_ERROR))
-	{
-		uint16_t current_brake_piston_val = *brakePiston1;
-		if (current_brake_piston_val >= SENSOR_ADC_MAX_VALUE) {
-			brake_piston_percentage_scaled = 100;
-			return brake_piston_percentage_scaled;
-		}
-		else {
-			// Add half of the divisor (SENSOR_ADC_MAX_VALUE) for proper integer rounding
-			uint32_t temp_calc_brake_piston = ((uint32_t)current_brake_piston_val * 100) + (SENSOR_ADC_MAX_VALUE / 2);
-			brake_piston_percentage_scaled = (uint8_t)(temp_calc_brake_piston / SENSOR_ADC_MAX_VALUE);
-			return brake_piston_percentage_scaled;
-		}
+	(void)brakePiston2;
+	uint16_t current_brake_piston_val = *brakePiston1;
+	if (current_brake_piston_val >= SENSOR_ADC_MAX_VALUE) {
+		return 100;
 	}
-	else
-	{
-		return 0x0;
-	}
+
+	uint32_t temp_calc_brake_piston = ((uint32_t)current_brake_piston_val * 100) + (SENSOR_ADC_MAX_VALUE / 2);
+	return (uint8_t)(temp_calc_brake_piston / SENSOR_ADC_MAX_VALUE);
 }
 
 // ============================================================================
@@ -239,8 +229,8 @@ uint8_t brakePistonsValue(uint16_t *brakePiston1, uint16_t *brakePiston2)
 
 /**
  * @brief  Calculates brake pedal position based on Hall effect sensor.
- * @details Maps the raw ADC value directly to a 0-100% range based on
- * @ref SENSOR_ADC_MAX_VALUE.
+ * @details Maps the raw ADC value to a 0-100% range, handling dead zones
+ * defined by @ref BRAKE_HALL_MIN_VAL and @ref BRAKE_HALL_MAX_VAL.
  *
  * @param[in] brakeHal Raw ADC value from Brake Hall Sensor.
  *
@@ -248,19 +238,28 @@ uint8_t brakePistonsValue(uint16_t *brakePiston1, uint16_t *brakePiston2)
  */
 uint8_t brakeHallValue(uint16_t *brakeHal)
 {
-	uint8_t brake_hall_scaled;
-	if (*brakeHal >= SENSOR_ADC_MAX_VALUE)
-	{
-		brake_hall_scaled = 100;
-		return brake_hall_scaled;
+	uint16_t calibrated_val = *brakeHal;
+
+	// Handling dead zones (Min/Max limits)
+	if (calibrated_val < BRAKE_HALL_MIN_VAL) {
+		calibrated_val = BRAKE_HALL_MIN_VAL; // Below min deadzone -> 0%
 	}
-	else
-	{
-		// Add half of the divisor (SENSOR_ADC_MAX_VALUE) for proper integer rounding
-		uint32_t temp_hall_brake = ((uint32_t)*brakeHal * 100) + (SENSOR_ADC_MAX_VALUE / 2);
-		brake_hall_scaled = (uint8_t)(temp_hall_brake / SENSOR_ADC_MAX_VALUE);
-		return brake_hall_scaled;
+	else if (calibrated_val > BRAKE_HALL_MAX_VAL) {
+		calibrated_val = BRAKE_HALL_MAX_VAL; // Above max deadzone -> 100%
 	}
+
+	// Scaling to 0-100% range
+	// Formula: (Value - Min) * 100 / (Max - Min)
+
+	// Calculate offset
+	// + Safety check to prevent underflow of uint32_t
+	uint32_t val_normalized = (calibrated_val > BRAKE_HALL_MIN_VAL) ? (calibrated_val - BRAKE_HALL_MIN_VAL) : 0;
+
+	// Calculate percentage
+	// Add half of the divisor (BRAKE_HALL_RANGE) for proper integer rounding
+	uint8_t brake_hall_scaled = (uint8_t)((val_normalized * 100 + (BRAKE_HALL_RANGE / 2)) / BRAKE_HALL_RANGE);
+
+	return brake_hall_scaled;
 }
 // ============================================================================
 // END OF BRAKE PEDAL (HALL) SECTION

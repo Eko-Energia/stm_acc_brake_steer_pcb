@@ -22,8 +22,8 @@ Enhanced error reporting and heartbeat module for the STM32 CAN network. integra
 
 ### Initialization
 ```c
-/* Initialize with CAN handle, Node ID, and Scheduler */
-CAN_init(&hcan, MY_NODE_ID, &schedulerList);
+/* Initialize with CAN handle and Scheduler */
+CAN_Init(&hcan);
 EH_init(&hcan, MY_NODE_ID, &schedulerList);
 ```
 

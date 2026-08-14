@@ -44,7 +44,13 @@ volatile VehicleState_t Vehicle = {
 		.RawStatus = PARKING_GEAR,
 		.IsConnected = false,
 		.LastMsgTick = 0
-    }
+    },
+	.Pedals = {
+		.Steer = 0,
+		.BrakePistons = 0,
+		.BrakeHall = 0,
+		.Accel = 0
+	}
 };
 /**
  * @brief  Determines the current state of the vehicle machine.
@@ -59,7 +65,7 @@ volatile VehicleState_t Vehicle = {
 MachineState_e machineState()
 {
 	// If there is any active error => neutral gear in
-	if (heh.activeErrorCode != 0)
+	if (heh.activeErrorCount != 0)
 	{
 		return JTSN_DOWN_NEUTRAL_GEAR_STATE;
 	}
@@ -113,12 +119,12 @@ MachineState_e machineState()
 // ============================================================================
 
 void Jetson_GetData(uint8_t *data, void *context) {
-    // This function is triggered automatically in the background right before sending the JETSON frame
-    data[steerValIndex] 		= steerValue(&ADC1_VAL[2]);
-    data[brakePistonsValIndex] 	= brakePistonsValue(&ADC1_VAL[1], &ADC2_VAL[1]);
-    data[brakeHallValIndex] 	= brakeHallValue(&ADC2_VAL[2]);
-    data[accelPedalValIndex] 	= accelPedalValue(&ADC1_VAL[0], &ADC2_VAL[0]);
-    // The remaining bytes are zeroed out by the driver itself.
+    (void)context;
+    // Pack values already computed in stateActions(); do not remap ADC here.
+    data[steerValIndex] 		= Vehicle.Pedals.Steer;
+    data[brakePistonsValIndex] 	= Vehicle.Pedals.BrakePistons;
+    data[brakeHallValIndex] 	= Vehicle.Pedals.BrakeHall;
+    data[accelPedalValIndex] 	= Vehicle.Pedals.Accel;
 }
 
 void EngineThrottle_GetData(uint8_t *data, void *context ) {
@@ -163,6 +169,13 @@ void stateActions()
     static MachineState_e lastState = (MachineState_e)-1;
     MachineState_e currentState = machineState();
 
+    // Map ADC once per cycle. Jetson_GetData() only packs this snapshot.
+    // Do not run plausibility checks here — EH_report() would force Neutral
+    // and CAN_RemoveScheduledMsg() would delete 0x226/0x227/0x41 before they fire.
+    Vehicle.Pedals.Steer        = steerValue(&ADC1_VAL[2]);
+    Vehicle.Pedals.BrakePistons = brakePistonsValue(&ADC1_VAL[1], &ADC2_VAL[1]);
+    Vehicle.Pedals.BrakeHall    = brakeHallValue(&ADC2_VAL[2]);
+
     // Updating global variable tempTH with the data from accel. pedal.
 	// It is used by EngineThrottle_GetData() but it cannon be
 	// inside of it as there could be a difference in readings
@@ -174,8 +187,8 @@ void stateActions()
 		currentState == JTSN_DOWN_REVERSE_STATE ||
 		currentState == JTSN_WORKS_DRIVE_STATE)
 	{
-		tempTH = engineSteer(&ADC1_VAL[0], &ADC2_VAL[0]);
-		//tempTH = engineSteer(800,0);	// test
+		Vehicle.Pedals.Accel = accelPedalValue(&ADC1_VAL[0], &ADC2_VAL[0]);
+		tempTH = (int16_t)((float)Vehicle.Pedals.Accel / 100.0f * 32767);
 	}
 
     // Execute actions ONLY when the gear or connection status changes
@@ -189,16 +202,17 @@ void stateActions()
         // 2. NEW TASKS FOR THE CURRENT STATE
         switch(currentState) {
 
-            // --- JETSON WORKING ---
-            case JTSN_WORKS_DRIVE_STATE: {
-                struct CAN_scheduledMsg msgJetson = {
-                    .header = TxHeader,        // Configured in can_bus.c (0x41)
-                    .getData = Jetson_GetData, // Data packing function
-                    .context = NULL
-                };
-                CAN_AddScheduledMsg(&msgJetson, &canScheduler);
-                break;
-            }
+            // // --- JETSON WORKING ---
+            // case JTSN_WORKS_DRIVE_STATE: {
+            //     struct CAN_scheduledMsg msgJetson = {
+            //         .header = TxHeader,        // Configured in can_bus.c (0x41)
+			// 		.periodMs = 100,
+			// 		.getData = Jetson_GetData, // Data packing function
+            //         .context = NULL
+            //     };
+            //     CAN_AddScheduledMsg(&msgJetson, &canScheduler);
+            //     break;
+            // }
 
             // --- JETSON DOWN (MANUAL CONTROL) ---
             case JTSN_DOWN_REVERSE_STATE:
@@ -213,20 +227,29 @@ void stateActions()
                 // Add periodic torque transmission to the driver
                 struct CAN_scheduledMsg msgLeftThrottle = {
                     .header = TxHeaderTHL,            // Configured in can_bus.c (0x226)
-                    .periodMs = 100,                   // Send every 100 ms
+                    .periodMs = 95,                   // Send every 100 ms
                     .getData = EngineThrottle_GetData,
                     .context = (void*)LEFT_ENGINE
                 };
 
                 // Add periodic torque transmission to the driver
-			   struct CAN_scheduledMsg msgRightThrottle = {
+			    struct CAN_scheduledMsg msgRightThrottle = {
 				   .header = TxHeaderTHR,            // Configured in can_bus.c (0x227)
-				   .periodMs = 100,                   // Send every 100 ms
+				   .periodMs = 95,
 				   .getData = EngineThrottle_GetData,
 				   .context = (void*)RIGHT_ENGINE
 			   };
+
+                struct CAN_scheduledMsg msgJetson = {
+                    .header = TxHeader,        // Configured in can_bus.c (0x41)
+					.periodMs = 100,
+					.getData = Jetson_GetData,
+                    .context = NULL
+                };
+
 			    CAN_AddScheduledMsg(&msgLeftThrottle, &canScheduler);
                 CAN_AddScheduledMsg(&msgRightThrottle, &canScheduler);
+                CAN_AddScheduledMsg(&msgJetson, &canScheduler);
                 break;
             }
 
