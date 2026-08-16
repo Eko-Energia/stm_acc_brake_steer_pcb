@@ -43,8 +43,8 @@ const CAN_SignalConfig_t SIG_CHARGER_CONTROL = {
 
 /** @brief Configuration for extracting the "CONTROL" signal from the PRND CAN frame. */
 const CAN_SignalConfig_t SIG_PRND_CONTROL = {
-    .startBit = 32,
-    .length = 8,
+    .startBit = 14,
+    .length = 2,
     .factor = 1.0f,
     .offset = 0.0f,
     .isSigned = false
@@ -118,7 +118,7 @@ bool CAN_ExtractSignal(const uint8_t* frameData, const CAN_SignalConfig_t *confi
  * - Charger status (ExtID: 0x1806E5F4)
  * - Jetson data (StdID: 0x200)
  * - Wheel Speed (ID 0x1A6, 0x1A7)
- * - PRND status (ID 0x420)
+ * - PRND status (ID 0x3e1)
  *
  * * @param[in] pHeader Pointer to the CAN Rx Header structure containing ID, IDE, DLC, etc.
  * @param[in] data    Pointer to the payload data (8 bytes).
@@ -150,7 +150,7 @@ void CAN_ProcessFrame(CAN_RxHeaderTypeDef *pHeader, uint8_t* data) {
 
     // Checking PRND UNKNOWN ID FIX IT LATER
     //	assuming random id for tests
-    if (pHeader-> IDE == CAN_ID_STD && pHeader->StdId == 0x420){
+    if (pHeader-> IDE == CAN_ID_STD && pHeader->StdId == 0x3e1){
     	float val;
     	if (CAN_ExtractSignal(data, &SIG_PRND_CONTROL, &val))
 		{
@@ -229,7 +229,7 @@ void CAN_ProcessIncoming(void) {
  * CPU load. It configures the following filter banks:
  * - Bank 0: Charger (Extended ID: 0x1806E5F4)
  * - Bank 1: Jetson (Standard ID: 0x200)
- * - Bank 2: PRND (Standard ID: 0x420)
+ * - Bank 2: PRND (Standard ID: 0x3e1)
  * - Bank 3: Wheel Speed (Standard ID: 0x1A6, 0x1A7)
  * * After configuring the filters to route accepted messages into RX FIFO0,
  * it activates the FIFO0 message pending interrupt and starts the CAN module.
@@ -283,9 +283,9 @@ void CAN_Custom_Init(CAN_HandleTypeDef *hcan) {
 		  Error_Handler();
 		}
 
-	// FILTER 3 - PRND (Standard ID: 0x420) -> BANK 2
+	// FILTER 3 - PRND (Standard ID: 0x3e1) -> BANK 2
 	filterConfig.FilterBank = 2;
-	filterConfig.FilterIdHigh = (0x420 << 5);
+	filterConfig.FilterIdHigh = (0x3e1 << 5);
 	filterConfig.FilterIdLow  = 0;
 	filterConfig.FilterMaskIdHigh = 0;
 	filterConfig.FilterMaskIdLow  = 0;

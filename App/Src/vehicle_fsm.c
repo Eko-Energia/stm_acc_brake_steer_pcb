@@ -199,6 +199,14 @@ void stateActions()
         CAN_RemoveScheduledMsg(TxHeaderTHR.StdId, &canScheduler); // Remove right Engine Torque frame
         CAN_RemoveScheduledMsg(TxHeaderTHL.StdId, &canScheduler); // Remove left Engine Torque frame
 
+        struct CAN_scheduledMsg msgJetson = {
+            .header = TxHeader,        // Configured in can_bus.c (0x41)
+            .periodMs = 100,
+            .getData = Jetson_GetData,
+            .context = NULL
+        };
+        CAN_AddScheduledMsg(&msgJetson, &canScheduler);
+        
         // 2. NEW TASKS FOR THE CURRENT STATE
         switch(currentState) {
 
@@ -239,17 +247,9 @@ void stateActions()
 				   .getData = EngineThrottle_GetData,
 				   .context = (void*)RIGHT_ENGINE
 			   };
-
-                struct CAN_scheduledMsg msgJetson = {
-                    .header = TxHeader,        // Configured in can_bus.c (0x41)
-					.periodMs = 100,
-					.getData = Jetson_GetData,
-                    .context = NULL
-                };
-
 			    CAN_AddScheduledMsg(&msgLeftThrottle, &canScheduler);
                 CAN_AddScheduledMsg(&msgRightThrottle, &canScheduler);
-                CAN_AddScheduledMsg(&msgJetson, &canScheduler);
+                
                 break;
             }
 
