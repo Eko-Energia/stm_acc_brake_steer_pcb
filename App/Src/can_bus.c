@@ -13,6 +13,11 @@
 
 #include "can_bus.h"
 #include "vehicle_types.h"
+#include "can_driver.h"
+
+/** @brief Buffer (from EKO CAN driver) holding frames received in the RX interrupt,
+ *         processed later in the main loop by @ref CAN_ProcessIncoming. */
+static struct CAN_IncomingMsgList canRxBuffer = {0};
 
 /** @brief General CAN Header (used for status reports to Jetson). */
 CAN_TxHeaderTypeDef TxHeader;
@@ -27,7 +32,6 @@ CAN_TxHeaderTypeDef TxHeaderTHR;
 /** @brief CAN Header for Network Management (NMT) (ID 0x0). */
 CAN_TxHeaderTypeDef TxHeaderNMT;
 
-
 /** @brief Configuration for extracting the "CONTROL" signal from the Charger CAN frame. */
 const CAN_SignalConfig_t SIG_CHARGER_CONTROL = {
     .startBit = 32,
@@ -39,11 +43,20 @@ const CAN_SignalConfig_t SIG_CHARGER_CONTROL = {
 
 /** @brief Configuration for extracting the "CONTROL" signal from the PRND CAN frame. */
 const CAN_SignalConfig_t SIG_PRND_CONTROL = {
-    .startBit = 32,
-    .length = 8,
+    .startBit = 14,
+    .length = 2,
     .factor = 1.0f,
     .offset = 0.0f,
     .isSigned = false
+};
+
+/** @brief Configuration for extracting the "RPM" signal from the Inverter CAN frame. */
+const CAN_SignalConfig_t SIG_WHEEL_SPEED = {
+    .startBit = 0,
+    .length = 16,
+    .factor = 1.0f,
+    .offset = 0.0f,
+    .isSigned = true
 };
 
 
@@ -104,6 +117,8 @@ bool CAN_ExtractSignal(const uint8_t* frameData, const CAN_SignalConfig_t *confi
  * It handles:
  * - Charger status (ExtID: 0x1806E5F4)
  * - Jetson data (StdID: 0x200)
+ * - Wheel Speed (ID 0x1A6, 0x1A7)
+ * - PRND status (ID 0x3e1)
  *
  * * @param[in] pHeader Pointer to the CAN Rx Header structure containing ID, IDE, DLC, etc.
  * @param[in] data    Pointer to the payload data (8 bytes).
@@ -135,7 +150,7 @@ void CAN_ProcessFrame(CAN_RxHeaderTypeDef *pHeader, uint8_t* data) {
 
     // Checking PRND UNKNOWN ID FIX IT LATER
     //	assuming random id for tests
-    if (pHeader-> IDE == CAN_ID_STD && pHeader->StdId == 0x420){
+    if (pHeader-> IDE == CAN_ID_STD && pHeader->StdId == 0x3e1){
     	float val;
     	if (CAN_ExtractSignal(data, &SIG_PRND_CONTROL, &val))
 		{
@@ -144,22 +159,65 @@ void CAN_ProcessFrame(CAN_RxHeaderTypeDef *pHeader, uint8_t* data) {
 			Vehicle.PRND.IsConnected = true;
 		}
     }
+
+    // Checking rear left wheel speed (ID 0x1A6)
+    if (pHeader->IDE == CAN_ID_STD && pHeader->StdId == 0x1A6) {
+        float val;
+        if (CAN_ExtractSignal(data, &SIG_WHEEL_SPEED, &val)) {
+            Vehicle.WheelSpeed.SpeedRL = (float)val * 0.006109f;    // 0.006109f is the conversion factor from RPM to m/s
+            Vehicle.WheelSpeed.IsConnectedRL = true;
+            Vehicle.WheelSpeed.LastMsgTickRL = HAL_GetTick();
+        }
+    }
+    // Checking rear right wheel speed (ID 0x1A7)
+    if (pHeader->IDE == CAN_ID_STD && pHeader->StdId == 0x1A7) {
+        float val;
+        if (CAN_ExtractSignal(data, &SIG_WHEEL_SPEED, &val)) {
+            Vehicle.WheelSpeed.SpeedRR = (float)val * 0.006109f;    // 0.006109f is the conversion factor from RPM to m/s
+            Vehicle.WheelSpeed.IsConnectedRR = true;
+            Vehicle.WheelSpeed.LastMsgTickRR = HAL_GetTick();
+        }
+    }
 }
 /**
  * @brief  Rx FIFO 0 message pending callback.
  *
- * * @details This function is called by the HAL library when a new CAN message
- * arrives in FIFO 0. It retrieves the message and passes it to
- *
- * @ref CAN_ProcessFrame for logic handling.
+ * * @details Called by HAL when a new CAN message arrives in FIFO 0.
+ * Only retrieves the frame and stores it in @ref canRxBuffer.
+ * Processing is deferred to @ref CAN_ProcessIncoming in the main loop.
  * * @param[in] hcan Pointer to the CAN handle structure.
  */
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
     CAN_RxHeaderTypeDef rxHeader;
-    uint8_t rxData[8];
+    uint8_t rxData[CAN_MAX_DLC] = {0};
 
     if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &rxHeader, rxData) == HAL_OK) {
-        CAN_ProcessFrame(&rxHeader, rxData);
+        /* Drop frame if buffer full — better than blocking inside the ISR. */
+        (void)CAN_AddIncomingMsg(&canRxBuffer, &rxHeader, rxData);
+    }
+}
+
+/**
+ * @brief  Processes all CAN frames buffered by the RX interrupt.
+ *
+ * @details Call periodically from the main loop. Drains @ref canRxBuffer
+ * (filled by @ref HAL_CAN_RxFifo0MsgPendingCallback) and passes each frame
+ * to @ref CAN_ProcessFrame. CAN RX0 IRQ is briefly disabled around each
+ * buffer access because the buffer is shared with the ISR.
+ */
+void CAN_ProcessIncoming(void) {
+    struct CAN_IncomingMsg msg;
+
+    while (1) {
+        HAL_NVIC_DisableIRQ(CAN_RX0_IRQn);
+        HAL_StatusTypeDef status = CAN_GetLatestMessage(&canRxBuffer, &msg);
+        HAL_NVIC_EnableIRQ(CAN_RX0_IRQn);
+
+        if (status != HAL_OK) {
+            break; /* buffer empty */
+        }
+
+        CAN_ProcessFrame(&msg.header, msg.data);
     }
 }
 
@@ -171,7 +229,8 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
  * CPU load. It configures the following filter banks:
  * - Bank 0: Charger (Extended ID: 0x1806E5F4)
  * - Bank 1: Jetson (Standard ID: 0x200)
- * - Bank 2: PRND (Standard ID: 0x420)
+ * - Bank 2: PRND (Standard ID: 0x3e1)
+ * - Bank 3: Wheel Speed (Standard ID: 0x1A6, 0x1A7)
  * * After configuring the filters to route accepted messages into RX FIFO0,
  * it activates the FIFO0 message pending interrupt and starts the CAN module.
  *
@@ -186,7 +245,6 @@ void CAN_Custom_Init(CAN_HandleTypeDef *hcan) {
 	CAN_FilterTypeDef filterConfig;
 
 	filterConfig.SlaveStartFilterBank = 14; // dont care (only matters when > 1 CAN)
-
 
 	// CAN filter config - NEEDS CORRECTION AFTER ARRANGEMENTS ABOUT PRND !!!!!
 	filterConfig.FilterMode = CAN_FILTERMODE_IDLIST; // list mode
@@ -225,14 +283,22 @@ void CAN_Custom_Init(CAN_HandleTypeDef *hcan) {
 		  Error_Handler();
 		}
 
-	// FILTER 3 - PRND (Standard ID: 0x420) -> BANK 2
+	// FILTER 3 - PRND (Standard ID: 0x3e1) -> BANK 2
 	filterConfig.FilterBank = 2;
-	filterConfig.FilterIdHigh = (0x420 << 5);
+	filterConfig.FilterIdHigh = (0x3e1 << 5);
 	filterConfig.FilterIdLow  = 0;
 	filterConfig.FilterMaskIdHigh = 0;
 	filterConfig.FilterMaskIdLow  = 0;
     if (HAL_CAN_ConfigFilter(hcan, &filterConfig) != HAL_OK) { Error_Handler(); }
 
+    // FILTER 4 - Wheel Speed (ID 0x1A6 + 0x1A7) -> BANK 3 (para w jednym banku, ID LIST)
+    filterConfig.FilterBank = 3;
+    filterConfig.FilterIdHigh     = (0x1A6 << 5);  // slot 1: RL
+    filterConfig.FilterIdLow      = 0;
+    filterConfig.FilterMaskIdHigh = (0x1A7 << 5);  // slot 2: RR (w list mode = drugi ID)
+    filterConfig.FilterMaskIdLow  = 0;
+    if (HAL_CAN_ConfigFilter(hcan, &filterConfig) != HAL_OK) { Error_Handler(); }
+    
     // Turning on interrupts and CAN
     if (HAL_CAN_ActivateNotification(hcan, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK) {
         Error_Handler();
@@ -241,7 +307,6 @@ void CAN_Custom_Init(CAN_HandleTypeDef *hcan) {
         Error_Handler();
     }
     HAL_NVIC_EnableIRQ(CAN_RX0_IRQn);
-
 
 	// Throttle/Torque Header (Direct Left Engine Control)
 	TxHeaderTHL.StdId = 0x226;    // LEFT inverter throttle address

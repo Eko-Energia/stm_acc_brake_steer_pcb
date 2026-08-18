@@ -55,6 +55,26 @@ typedef struct {
     	uint32_t LastMsgTick;		///< Timestamp (HAL_GetTick) of the last received CAN frame.
     } PRND;
 
+	struct {
+		float SpeedRL;
+		bool IsConnectedRL;
+		uint32_t LastMsgTickRL;
+
+		float SpeedRR;
+		bool IsConnectedRR;
+		uint32_t LastMsgTickRR;
+	} WheelSpeed;
+
+	/**
+	 * @brief Latest mapped driver-input percentages (0-100).
+	 * Updated in the main loop; packed into the Jetson CAN frame by Jetson_GetData().
+	 */
+	struct {
+		uint8_t Steer;
+		uint8_t BrakePistons;
+		uint8_t BrakeHall;
+		uint8_t Accel;
+	} Pedals;
 
 } VehicleState_t;
 

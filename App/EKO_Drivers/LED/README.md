@@ -23,7 +23,22 @@ statusLed.GPIO_Pin = GPIO_PIN_5;  // Replace with your GPIO pin
 LED_ChangeState(&statusLed, LED_BLINK);  // Set LED to blink when everything is fine
 ```
 
-### 3. Handle LED in Main Loop
+### 3. Increment `syncTick` in `HAL_IncTick`
+
+The LED driver uses an internal `syncTick` counter for blink phase timing.  
+You should increment it in `HAL_IncTick()` every 1 ms:
+
+```c
+#include "led_driver.h"
+
+void HAL_IncTick(void)
+{
+    uwTick += uwTickFreq;
+    LED_IncSyncTick();
+}
+```
+
+### 4. Handle LED in Main Loop
 
 Call `LED_Handle()` periodically in your main loop or timer interrupt:
 
@@ -51,4 +66,11 @@ int main(void) {
 
 - Ensure GPIO pins are configured as output in your STM32CubeMX or initialization code
 - `LED_Handle()` should be called frequently enough to maintain blink timing
-- The driver uses `HAL_GetTick()` for timing, so ensure HAL is initialized
+- `LED_IncSyncTick()` must be called from `HAL_IncTick()` to keep blinking running
+- For CAN synchronization on a **slave**, call `LED_SetSyncTick(receivedTick)` when a sync frame is received
+- On the **master**, you can periodically send the current tick with:
+
+```c
+uint32_t tick = LED_GetSyncTick();
+memcpy(txData, &tick, sizeof(tick));  // adjust endianness/layout for your CAN protocol
+```

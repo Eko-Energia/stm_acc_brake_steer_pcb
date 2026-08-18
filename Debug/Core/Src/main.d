@@ -38,9 +38,10 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
  D:/STM32/Workspaces/perla_pedals_alpha_ver/App/Inc/vehicle_fsm.h \
  D:/STM32/Workspaces/perla_pedals_alpha_ver/App/Inc/pedals_map.h \
  D:/STM32/Workspaces/perla_pedals_alpha_ver/App/EKO_Drivers/Error_Corrutines/Inc/error_handler.h \
- D:/STM32/Workspaces/perla_pedals_alpha_ver/App/EKO_Drivers/CAN/Inc/can_driver.h \
- D:/STM32/Workspaces/perla_pedals_alpha_ver/App/EKO_Drivers/CAN/Inc/can_id_list.h \
+ D:/STM32/Workspaces/perla_pedals_alpha_ver/App/EKO_Drivers/Error_Corrutines/Inc/../../CAN/Inc/can_driver.h \
+ D:/STM32/Workspaces/perla_pedals_alpha_ver/App/EKO_Drivers/Error_Corrutines/Inc/../../CAN/Inc/can_id_list.h \
  D:/STM32/Workspaces/perla_pedals_alpha_ver/App/Inc/engine_control.h \
+ D:/STM32/Workspaces/perla_pedals_alpha_ver/App/EKO_Drivers/CAN/Inc/can_driver.h \
  D:/STM32/Workspaces/perla_pedals_alpha_ver/App/Inc/pedals_const_val.h \
  D:/STM32/Workspaces/perla_pedals_alpha_ver/App/Inc/sensors.h \
  D:/STM32/Workspaces/perla_pedals_alpha_ver/App/EKO_Drivers/LED/Inc/led_driver.h
@@ -88,9 +89,10 @@ D:/STM32/Workspaces/perla_pedals_alpha_ver/App/Inc/engine_control.h:
 D:/STM32/Workspaces/perla_pedals_alpha_ver/App/Inc/vehicle_fsm.h:
 D:/STM32/Workspaces/perla_pedals_alpha_ver/App/Inc/pedals_map.h:
 D:/STM32/Workspaces/perla_pedals_alpha_ver/App/EKO_Drivers/Error_Corrutines/Inc/error_handler.h:
-D:/STM32/Workspaces/perla_pedals_alpha_ver/App/EKO_Drivers/CAN/Inc/can_driver.h:
-D:/STM32/Workspaces/perla_pedals_alpha_ver/App/EKO_Drivers/CAN/Inc/can_id_list.h:
+D:/STM32/Workspaces/perla_pedals_alpha_ver/App/EKO_Drivers/Error_Corrutines/Inc/../../CAN/Inc/can_driver.h:
+D:/STM32/Workspaces/perla_pedals_alpha_ver/App/EKO_Drivers/Error_Corrutines/Inc/../../CAN/Inc/can_id_list.h:
 D:/STM32/Workspaces/perla_pedals_alpha_ver/App/Inc/engine_control.h:
+D:/STM32/Workspaces/perla_pedals_alpha_ver/App/EKO_Drivers/CAN/Inc/can_driver.h:
 D:/STM32/Workspaces/perla_pedals_alpha_ver/App/Inc/pedals_const_val.h:
 D:/STM32/Workspaces/perla_pedals_alpha_ver/App/Inc/sensors.h:
 D:/STM32/Workspaces/perla_pedals_alpha_ver/App/EKO_Drivers/LED/Inc/led_driver.h:

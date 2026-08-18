@@ -86,10 +86,10 @@ uint8_t accelPedalValue(uint16_t *accel1val, uint16_t *accel2val);
 
 /**
  * @brief  Calculates the brake pressure percentage.
- * @details Integrates the redundancy check (@ref brakePistonsCheck).
+ * @details Maps Sensor 1 to 0-100%. Does not run @ref brakePistonsCheck.
  * * @param[in] brakePiston1 Raw ADC value from Sensor 1.
- * @param[in] brakePiston2 Raw ADC value from Sensor 2.
- * @return uint8_t Brake pressure in percentage (0-100). Returns 0 on error.
+ * @param[in] brakePiston2 Raw ADC value from Sensor 2 (unused).
+ * @return uint8_t Brake pressure in percentage (0-100).
  */
 uint8_t brakePistonsValue(uint16_t *brakePiston1, uint16_t *brakePiston2);
 

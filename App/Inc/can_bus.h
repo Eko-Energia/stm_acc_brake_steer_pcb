@@ -81,12 +81,20 @@ void CAN_ProcessFrame(CAN_RxHeaderTypeDef *pHeader, uint8_t* data);
 
 /**
  * @brief  HAL CAN Rx FIFO 0 Msg Pending Callback.
- * @details This function is called by the HAL ISR when a message arrives in FIFO0.
- * It reads the message using @ref HAL_CAN_GetRxMessage and passes it to
- * @ref CAN_ProcessFrame.
+ * @details Called by the HAL ISR when a message arrives in FIFO0.
+ * Reads the frame with @ref HAL_CAN_GetRxMessage and stores it in the
+ * EKO CAN driver incoming buffer. Processing happens later in
+ * @ref CAN_ProcessIncoming.
  * * @param[in] hcan Pointer to the CAN handle.
  */
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan);
+
+/**
+ * @brief  Drains the incoming CAN message buffer and processes each frame.
+ * @details Call periodically from the main loop. Frames buffered by
+ * @ref HAL_CAN_RxFifo0MsgPendingCallback are passed to @ref CAN_ProcessFrame.
+ */
+void CAN_ProcessIncoming(void);
 
 /* @brief Custom initialization of CAN (e.g. filers). */
 void CAN_Custom_Init(CAN_HandleTypeDef * hcan);
