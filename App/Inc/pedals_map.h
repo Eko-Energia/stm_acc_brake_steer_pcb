@@ -126,6 +126,9 @@ uint16_t engineSteer(uint16_t *accel1val, uint16_t *accel2val);
 /** @brief Inverter full-scale torque command - the 'max_value' of the curve. */
 #define THROTTLE_MAX_VAL (32767)
 
+/** @brief Highest accepted throttle limit, in percent of pedal travel. */
+#define THROTTLE_LIMIT_MAX (100u)
+
 /**
  * @brief  Sets the throttle curve exponent 'z'.
  * @details Stores the value and raises a rebuild flag; the table itself is
@@ -142,9 +145,27 @@ uint16_t engineSteer(uint16_t *accel1val, uint16_t *accel2val);
 bool ThrottleCurve_SetZ(float z);
 
 /**
+ * @brief  Sets the maximum accelerator pedal travel that reaches the motors.
+ * @details Pedal positions above the limit are treated as if the pedal were held
+ * exactly at the limit, so the torque command saturates there. Safe to
+ * call from any context, including the CAN RX interrupt.
+ *
+ * @param[in] limitPercent Limit in percent of pedal travel, 0 - @ref THROTTLE_LIMIT_MAX.
+ *
+ * @return bool
+ * @retval true  Value accepted.
+ * @retval false Rejected (above the maximum). Active limit left unchanged.
+ *
+ * @note The resulting torque ceiling is THROTTLE_MAX_VAL * (limit/100)^z, so it
+ * scales with the active curve exponent. A low limit combined with a steep
+ * exponent yields a very small ceiling.
+ */
+bool ThrottleCurve_SetLimit(uint8_t limitPercent);
+
+/**
  * @brief  Maps accelerator pedal position to the inverter torque command.
  * @details Implements y = THROTTLE_MAX_VAL * (x/100)^z via a precomputed
- * lookup table.
+ * lookup table, saturated at the limit set by @ref ThrottleCurve_SetLimit.
  *
  * @param[in] accelPercent Pedal position in percent (0-100).
  * @return int16_t Torque command for the inverter (0 - @ref THROTTLE_MAX_VAL).

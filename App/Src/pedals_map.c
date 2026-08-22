@@ -167,9 +167,18 @@ uint16_t engineSteer(uint16_t *accel1val, uint16_t *accel2val)
 /** @brief Table length: one entry per whole percent of pedal travel (0-100). */
 #define THROTTLE_LUT_SIZE (101)
 
+// Build-time guard for the throttle limit: it is used directly as a table index
+// after clamping, so the configured maximum must be a valid index. Compile-time
+// only.
+_Static_assert(THROTTLE_LIMIT_MAX <= (THROTTLE_LUT_SIZE - 1),
+               "throttle limit must not exceed the table's highest index");
+
 static int16_t        throttleLut[THROTTLE_LUT_SIZE];
 static volatile float throttleZPending = THROTTLE_Z_MIN;
 static volatile bool  throttleLutDirty = true;
+
+// Applied at lookup time, so it needs no rebuild and no dirty flag.
+static volatile uint8_t throttleLimitPct = THROTTLE_LIMIT_MAX;
 
 /**
  * @brief  Sets the throttle curve exponent 'z'.
@@ -202,6 +211,28 @@ bool ThrottleCurve_SetZ(float z)
 
 	throttleZPending = z;
 	throttleLutDirty = true; // set last, so the flag never precedes the value
+	return true;
+}
+
+/**
+ * @brief  Sets the maximum accelerator pedal travel that reaches the motors.
+ * @details Rejecting rather than clamping an out-of-range value lets the caller
+ * report the bad frame, and leaves the previous limit in force.
+ *
+ * @param[in] limitPercent Limit in percent of pedal travel, 0 - @ref THROTTLE_LIMIT_MAX.
+ *
+ * @return bool
+ * @retval true  Value accepted.
+ * @retval false Rejected. Active limit left unchanged.
+ */
+bool ThrottleCurve_SetLimit(uint8_t limitPercent)
+{
+	if (limitPercent > THROTTLE_LIMIT_MAX)
+	{
+		return false;
+	}
+
+	throttleLimitPct = limitPercent;
 	return true;
 }
 
@@ -251,11 +282,12 @@ int16_t ThrottleCurve_Apply(uint8_t accelPercent)
 		ThrottleCurve_Rebuild();
 	}
 
-	// Defensive: accelPedalValue() already clamps to 100, but an out-of-range
-	// table index would be a memory fault rather than just a wrong torque value.
-	if (accelPercent > 100u)
+	// Saturate at the configured limit. Snapshot it first: the setter may run from
+	// the CAN RX interrupt between the comparison and the lookup.
+	const uint8_t limit = throttleLimitPct;
+	if (accelPercent > limit)
 	{
-		accelPercent = 100u;
+		accelPercent = limit;
 	}
 
 	return throttleLut[accelPercent];
