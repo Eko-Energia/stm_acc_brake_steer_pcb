@@ -263,18 +263,24 @@ void stateActions()
             case JTSN_DOWN_NEUTRAL_GEAR_STATE:
             	// Fall through case to not repeat the code
             case SAFE_STOP_STATE: {
-                if (getEngineFlag() != ENGINE_STOP_NEUTRAL) {
-                    neutralEngine(); // NMT (Neutral) frame - one-shot
-                    setEngineFlag(ENGINE_STOP_NEUTRAL);
-                }
+            	if(Vehicle.WheelSpeed.SpeedRL == 0 && Vehicle.WheelSpeed.SpeedRR == 0)
+            	{
+					if (getEngineFlag() != ENGINE_STOP_NEUTRAL) {
+						neutralEngine(); // NMT (Neutral) frame - one-shot
+						setEngineFlag(ENGINE_STOP_NEUTRAL);
+					}
+            	}
                 break;
             }
 
             case JTSN_DOWN_PARKING_STATE: {
-                if (getEngineFlag() != ENGINE_STOP_BLOCKED) {
-                    stopEngine(); // NMT (Stop) frame - one-shot
-                    setEngineFlag(ENGINE_STOP_BLOCKED);
-                }
+            	if(Vehicle.WheelSpeed.SpeedRL == 0 && Vehicle.WheelSpeed.SpeedRR == 0)
+            	{
+					if (getEngineFlag() != ENGINE_STOP_BLOCKED) {
+						stopEngine(); // NMT (Stop) frame - one-shot
+						setEngineFlag(ENGINE_STOP_BLOCKED);
+					}
+            	}
                 break;
             }
 
