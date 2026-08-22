@@ -22,6 +22,7 @@
 #define TH_mask (0xFF)
 #define TH_bitpos (8)
 #define NMTcommands (2)
+#define MAX_THROTTLE_PERCENT (5)
 
 /** @brief Macros for data[] indexing in Jetson_GetData function.
  * */

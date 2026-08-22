@@ -195,7 +195,17 @@ void stateActions()
 		currentState == JTSN_WORKS_DRIVE_STATE)
 	{
 		Vehicle.Pedals.Accel = accelPedalValue(&ADC1_VAL[0], &ADC2_VAL[0]);
-		tempTH = (int16_t)((float)Vehicle.Pedals.Accel / 100.0f * 32767);
+		// LIMIT THROTTLE without changing the vehicle state
+		if (Vehicle.Pedals.Accel <= 5)
+		{
+			tempTH = (int16_t)((float)Vehicle.Pedals.Accel / 100.0f * 32767);
+		}
+		else
+		{
+			tempTH = (int16_t)((float)MAX_THROTTLE_PERCENT / 100.0f * 32767);
+		}
+
+
 	}
 
     // Execute actions ONLY when the gear or connection status changes
