@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include "engine_control.h"
 #include <stdbool.h>
+#include <math.h>
 
 bool brakesPressed = false;
 // ============================================================================
@@ -140,6 +141,12 @@ uint8_t accelPedalValue(uint16_t *accel1val, uint16_t *accel2val)
  * @param[in] accel2val Raw ADC value from Accelerator Sensor 2.
  *
  * @return uint16_t Control value for the engine (0 - 32767).
+ *
+ * @warning Currently unused - nothing calls this and the linker discards it.
+ * It still implements the original purely linear mapping, so it does
+ * NOT match the live path, which applies the progressive throttle
+ * curve. If this is ever wired up, replace the body with a call to
+ * @ref ThrottleCurve_Apply instead of duplicating the formula.
  */
 uint16_t engineSteer(uint16_t *accel1val, uint16_t *accel2val)
 {
@@ -147,6 +154,145 @@ uint16_t engineSteer(uint16_t *accel1val, uint16_t *accel2val)
 	return accelEngine;
 
 }
+
+// ----------------------------------------------------------------------------
+// Throttle curve
+//
+// y = THROTTLE_MAX_VAL * (x/100)^z is evaluated through a lookup table. The
+// pedal position is a whole percent, so a 101-entry table covers the entire
+// input domain: no interpolation, no approximation error, and the runtime cost
+// collapses to a single array read.
+// ----------------------------------------------------------------------------
+
+/** @brief Table length: one entry per whole percent of pedal travel (0-100). */
+#define THROTTLE_LUT_SIZE (101)
+
+// Build-time guard for the throttle limit: it is used directly as a table index
+// after clamping, so the configured maximum must be a valid index. Compile-time
+// only.
+_Static_assert(THROTTLE_LIMIT_MAX <= (THROTTLE_LUT_SIZE - 1),
+               "throttle limit must not exceed the table's highest index");
+
+static int16_t        throttleLut[THROTTLE_LUT_SIZE];
+static volatile float throttleZPending = THROTTLE_Z_MIN;
+static volatile bool  throttleLutDirty = true;
+
+// Applied at lookup time, so it needs no rebuild and no dirty flag.
+static volatile uint8_t throttleLimitPct = THROTTLE_LIMIT_MAX;
+
+/**
+ * @brief  Sets the throttle curve exponent 'z'.
+ * @details Stores the value and raises a rebuild flag; the table itself is
+ * rebuilt lazily by @ref ThrottleCurve_Apply. Safe to call from any
+ * context, including the CAN RX interrupt.
+ *
+ * @param[in] z Exponent, must be within [@ref THROTTLE_Z_MIN, @ref THROTTLE_Z_MAX].
+ *
+ * @return bool
+ * @retval true  Value accepted.
+ * @retval false Rejected (out of range, NaN or Inf). Active curve left unchanged.
+ */
+bool ThrottleCurve_SetZ(float z)
+{
+	// Test for the valid window rather than for the invalid one: a NaN compares
+	// false against everything, so this rejects NaN and Inf along with
+	// out-of-range values. A malformed frame must never reach the curve.
+	if (!(z >= THROTTLE_Z_MIN && z <= THROTTLE_Z_MAX))
+	{
+		return false;
+	}
+
+	// The frame is expected to be periodic, so an unchanged z must not trigger a
+	// rebuild - that would pay the full rebuild cost on every single frame.
+	if (z == throttleZPending)
+	{
+		return true;
+	}
+
+	throttleZPending = z;
+	throttleLutDirty = true; // set last, so the flag never precedes the value
+	return true;
+}
+
+/**
+ * @brief  Sets the maximum accelerator pedal travel that reaches the motors.
+ * @details Rejecting rather than clamping an out-of-range value lets the caller
+ * report the bad frame, and leaves the previous limit in force.
+ *
+ * @param[in] limitPercent Limit in percent of pedal travel, 0 - @ref THROTTLE_LIMIT_MAX.
+ *
+ * @return bool
+ * @retval true  Value accepted.
+ * @retval false Rejected. Active limit left unchanged.
+ */
+bool ThrottleCurve_SetLimit(uint8_t limitPercent)
+{
+	if (limitPercent > THROTTLE_LIMIT_MAX)
+	{
+		return false;
+	}
+
+	throttleLimitPct = limitPercent;
+	return true;
+}
+
+/**
+ * @brief  Rebuilds the lookup table for the pending exponent.
+ * @details Runs 99 powf() calls, which takes roughly 1-2 ms. Main-loop context
+ * only - never call this from an interrupt.
+ */
+static void ThrottleCurve_Rebuild(void)
+{
+	// Clear the flag before snapshotting z. If a new value lands mid-build the
+	// flag goes up again and the table is rebuilt on the next pass, instead of
+	// losing the update or mixing two exponents into a single table.
+	throttleLutDirty = false;
+	const float z = throttleZPending;
+
+	// Endpoints are pinned: full throttle must be exactly full scale regardless
+	// of how powf() rounds, and a released pedal must be exactly zero.
+	throttleLut[0] = 0;
+	throttleLut[THROTTLE_LUT_SIZE - 1] = THROTTLE_MAX_VAL;
+
+	for (uint8_t i = 1; i < THROTTLE_LUT_SIZE - 1; i++)
+	{
+		float norm = powf((float)i / 100.0f, z);
+
+		// Add half a count before truncating so the cast rounds to nearest instead
+		// of biasing every entry downwards. Same trick as the integer mapping
+		// helpers in this file, which add half the divisor before dividing.
+		throttleLut[i] = (int16_t)((norm * (float)THROTTLE_MAX_VAL) + 0.5f);
+	}
+}
+
+/**
+ * @brief  Maps accelerator pedal position to the inverter torque command.
+ * @details Rebuilds the table first if the exponent changed since the last call.
+ *
+ * @param[in] accelPercent Pedal position in percent (0-100).
+ *
+ * @return int16_t Torque command for the inverter (0 - @ref THROTTLE_MAX_VAL).
+ *
+ * @note Main-loop context only, because it may trigger a rebuild.
+ */
+int16_t ThrottleCurve_Apply(uint8_t accelPercent)
+{
+	if (throttleLutDirty)
+	{
+		ThrottleCurve_Rebuild();
+	}
+
+	// Saturate at the configured limit. Snapshot it first: the setter may run from
+	// the CAN RX interrupt between the comparison and the lookup.
+	const uint8_t limit = throttleLimitPct;
+	if (accelPercent > limit)
+	{
+		accelPercent = limit;
+	}
+
+	return throttleLut[accelPercent];
+}
+
 // ============================================================================
 // END OF ENGINE SECTION
 // ============================================================================

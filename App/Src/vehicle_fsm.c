@@ -142,7 +142,9 @@ void EngineThrottle_GetData(uint8_t *data, void *context ) {
 
 	if(Vehicle.WheelSpeed.SpeedRL != 0 || Vehicle.WheelSpeed.SpeedRR != 0)
 	{
-		if(Vehicle.Pedals.Accel == 0)
+		// Checked on the mapped command, not on the pedal percent: with a
+		// progressive curve (z > 1) a small non-zero pedal still maps to 0.
+		if(localTH == 0)
 		{
 			localTH = 1;
 		}
@@ -195,7 +197,7 @@ void stateActions()
 		currentState == JTSN_WORKS_DRIVE_STATE)
 	{
 		Vehicle.Pedals.Accel = accelPedalValue(&ADC1_VAL[0], &ADC2_VAL[0]);
-		tempTH = (int16_t)((float)Vehicle.Pedals.Accel / 100.0f * 32767);
+		tempTH = ThrottleCurve_Apply(Vehicle.Pedals.Accel);
 	}
 
     // Execute actions ONLY when the gear or connection status changes
