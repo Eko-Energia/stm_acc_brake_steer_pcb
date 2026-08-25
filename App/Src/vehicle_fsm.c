@@ -216,6 +216,8 @@ void stateActions()
         };
         CAN_AddScheduledMsg(&msgJetson, &canScheduler);
         
+        bool isBad = 0;
+
         // 2. NEW TASKS FOR THE CURRENT STATE
         switch(currentState) {
 
@@ -265,6 +267,11 @@ void stateActions()
             case JTSN_DOWN_NEUTRAL_GEAR_STATE:
             	// Fall through case to not repeat the code
             case SAFE_STOP_STATE: {
+            	if(Vehicle.WheelSpeed.SpeedRL != 0 || Vehicle.WheelSpeed.SpeedRR != 0)
+            	{
+            		isBad = 1;
+            		break;
+            	}
 				if (getEngineFlag() != ENGINE_STOP_NEUTRAL) {
 					neutralEngine(); // NMT (Neutral) frame - one-shot
 					setEngineFlag(ENGINE_STOP_NEUTRAL);
@@ -273,6 +280,11 @@ void stateActions()
             }
 
             case JTSN_DOWN_PARKING_STATE: {
+            	if(Vehicle.WheelSpeed.SpeedRL != 0 || Vehicle.WheelSpeed.SpeedRR != 0)
+            	{
+            		isBad = 1;
+            		break;
+            	}
 				if (getEngineFlag() != ENGINE_STOP_BLOCKED) {
 					stopEngine(); // NMT (Stop) frame - one-shot
 					setEngineFlag(ENGINE_STOP_BLOCKED);
@@ -285,6 +297,9 @@ void stateActions()
         }
 
         // 3. Save the current state, so nothing is executed no change occurs
-        lastState = currentState;
+        if(!isBad)
+        {
+        	lastState = currentState;
+        }
     }
 }
