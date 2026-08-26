@@ -144,7 +144,9 @@ void EngineThrottle_GetData(uint8_t *data, void *context ) {
 	{
 		// Checked on the mapped command, not on the pedal percent: with a
 		// progressive curve (z > 1) a small non-zero pedal still maps to 0.
-		if(localTH == 0)
+		// Only an incidental zero is raised. A limit of zero is a deliberate
+		// request for no torque and must reach the inverters unchanged.
+		if(localTH == 0 && ThrottleCurve_GetLimit() != 0)
 		{
 			localTH = 1;
 		}

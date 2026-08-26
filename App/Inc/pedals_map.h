@@ -163,6 +163,15 @@ bool ThrottleCurve_SetZ(float z);
 bool ThrottleCurve_SetLimit(uint8_t limitPercent);
 
 /**
+ * @brief  Returns the active throttle limit.
+ * @details A limit of zero is a deliberate request for no torque, which callers
+ * must be able to tell apart from an incidentally zero command.
+ *
+ * @return uint8_t Limit in percent of pedal travel, 0 - @ref THROTTLE_LIMIT_MAX.
+ */
+uint8_t ThrottleCurve_GetLimit(void);
+
+/**
  * @brief  Maps accelerator pedal position to the inverter torque command.
  * @details Implements y = THROTTLE_MAX_VAL * (x/100)^z via a precomputed
  * lookup table, saturated at the limit set by @ref ThrottleCurve_SetLimit.

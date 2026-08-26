@@ -173,9 +173,9 @@ uint16_t engineSteer(uint16_t *accel1val, uint16_t *accel2val)
 _Static_assert(THROTTLE_LIMIT_MAX <= (THROTTLE_LUT_SIZE - 1),
                "throttle limit must not exceed the table's highest index");
 
-static int16_t        throttleLut[THROTTLE_LUT_SIZE];
-static volatile float throttleZPending = THROTTLE_Z_MIN;
-static volatile bool  throttleLutDirty = true;
+static int16_t throttleLut[THROTTLE_LUT_SIZE];
+static volatile float throttleZRequested = THROTTLE_Z_MIN;
+static volatile bool throttleLutDirty = true;
 
 // Applied at lookup time, so it needs no rebuild and no dirty flag.
 static volatile uint8_t throttleLimitPct = THROTTLE_LIMIT_MAX;
@@ -202,14 +202,15 @@ bool ThrottleCurve_SetZ(float z)
 		return false;
 	}
 
-	// The frame is expected to be periodic, so an unchanged z must not trigger a
-	// rebuild - that would pay the full rebuild cost on every single frame.
-	if (z == throttleZPending)
+	// Compared against the last request, not against the table: either the table
+	// already reflects this value, or a rebuild for it is already scheduled. The
+	// frame is expected to be periodic, so repeats must not pay the rebuild cost.
+	if (z == throttleZRequested)
 	{
 		return true;
 	}
 
-	throttleZPending = z;
+	throttleZRequested = z;
 	throttleLutDirty = true; // set last, so the flag never precedes the value
 	return true;
 }
@@ -237,6 +238,15 @@ bool ThrottleCurve_SetLimit(uint8_t limitPercent)
 }
 
 /**
+ * @brief  Returns the active throttle limit.
+ * @return uint8_t Limit in percent of pedal travel, 0 - @ref THROTTLE_LIMIT_MAX.
+ */
+uint8_t ThrottleCurve_GetLimit(void)
+{
+	return throttleLimitPct;
+}
+
+/**
  * @brief  Rebuilds the lookup table for the pending exponent.
  * @details Runs 99 powf() calls, which takes roughly 1-2 ms. Main-loop context
  * only - never call this from an interrupt.
@@ -247,7 +257,7 @@ static void ThrottleCurve_Rebuild(void)
 	// flag goes up again and the table is rebuilt on the next pass, instead of
 	// losing the update or mixing two exponents into a single table.
 	throttleLutDirty = false;
-	const float z = throttleZPending;
+	const float z = throttleZRequested;
 
 	// Endpoints are pinned: full throttle must be exactly full scale regardless
 	// of how powf() rounds, and a released pedal must be exactly zero.
