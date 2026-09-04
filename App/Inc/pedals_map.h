@@ -127,7 +127,7 @@ uint16_t engineSteer(uint16_t *accel1val, uint16_t *accel2val);
 #define THROTTLE_MAX_VAL (32767)
 
 /** @brief Highest accepted throttle limit, in percent of pedal travel. */
-#define THROTTLE_LIMIT_MAX (100u)
+#define THROTTLE_LIMIT_MAX (50u)
 
 /**
  * @brief  Sets the throttle curve exponent 'z'.
