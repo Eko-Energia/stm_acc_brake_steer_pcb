@@ -59,6 +59,40 @@ const CAN_SignalConfig_t SIG_WHEEL_SPEED = {
     .isSigned = true
 };
 
+/** @brief Configuration for extracting the "Wheel_Speed" signal from a wheel speed sensor. */
+const CAN_SignalConfig_t SIG_WHEEL_SPEED_SENSOR = {
+    .startBit = 0,
+    .length = 16,
+    .factor = 0.000839f,    // 0.000839f is the sensor scaling factor to m/s
+    .offset = 0.0f,
+    .isSigned = false
+};
+
+/** @brief Configuration for extracting the raw "Absolute_Encoder" count from the Dashboard CAN frame. */
+const CAN_SignalConfig_t SIG_ABSOLUTE_ENCODER = {
+    .startBit = 0,
+    .length = 14,
+    .factor = 1.0f,
+    .offset = 0.0f,
+    .isSigned = false
+};
+
+/** @brief Absolute encoder count read with the steering rack centred. */
+#define ENCODER_CENTER_RAW (8192)
+
+/**
+ * @brief Rack displacement per encoder count, as the fraction 35/4096 mm.
+ * @details The full 16384-count sweep of the encoder (+-540 deg at the wheel)
+ * moves the rack across its whole calibrated range of +-70 mm, so
+ * 140 mm / 16384 counts reduces to 35 / 4096. Correct this pair once the
+ * steering ratio is measured on the car.
+ */
+#define ENCODER_RACK_MM_NUM (35)
+#define ENCODER_RACK_MM_DEN (4096)
+
+/** @brief Set to -1 if the encoder counts up while the rack moves to the right. */
+#define ENCODER_RACK_DIRECTION (1)
+
 
 /**
  * @brief  Extracts a physical signal value from a raw CAN frame based on configuration.
@@ -117,8 +151,8 @@ bool CAN_ExtractSignal(const uint8_t* frameData, const CAN_SignalConfig_t *confi
  * It handles:
  * - Charger status (ExtID: 0x1806E5F4)
  * - Jetson data (StdID: 0x200)
- * - Wheel Speed (ID 0x1A6, 0x1A7)
- * - PRND status (ID 0x3e1)
+ * - Wheel Speed (ID 0x1A6, 0x1A7 rear, 0x661, 0x641 front)
+ * - PRND status and steering rack position (ID 0x3e1)
  *
  * * @param[in] pHeader Pointer to the CAN Rx Header structure containing ID, IDE, DLC, etc.
  * @param[in] data    Pointer to the payload data (8 bytes).
@@ -158,6 +192,19 @@ void CAN_ProcessFrame(CAN_RxHeaderTypeDef *pHeader, uint8_t* data) {
 			Vehicle.PRND.LastMsgTick = HAL_GetTick();
 			Vehicle.PRND.IsConnected = true;
 		}
+
+    	// Steering rack position rides in the same frame as PRND, so it needs
+    	// no filter of its own. Kept in integer millimetres: that is what the
+    	// torque vectoring expects, and the encoder scaling divides exactly.
+    	if (CAN_ExtractSignal(data, &SIG_ABSOLUTE_ENCODER, &val))
+		{
+    		int32_t encoderOffset = (int32_t)val - ENCODER_CENTER_RAW;
+
+    		Vehicle.Steering.RackMm = (int16_t)(ENCODER_RACK_DIRECTION *
+    				(encoderOffset * ENCODER_RACK_MM_NUM) / ENCODER_RACK_MM_DEN);
+			Vehicle.Steering.LastMsgTick = HAL_GetTick();
+			Vehicle.Steering.IsConnected = true;
+		}
     }
 
     // Checking rear left wheel speed (ID 0x1A6)
@@ -176,6 +223,26 @@ void CAN_ProcessFrame(CAN_RxHeaderTypeDef *pHeader, uint8_t* data) {
             Vehicle.WheelSpeed.SpeedRR = (float)val * 0.006109f;    // 0.006109f is the conversion factor from RPM to m/s
             Vehicle.WheelSpeed.IsConnectedRR = true;
             Vehicle.WheelSpeed.LastMsgTickRR = HAL_GetTick();
+        }
+    }
+    // Checking front left wheel speed (ID 0x661)
+    if (pHeader->IDE == CAN_ID_STD && pHeader->StdId == 0x661) {
+        float val;
+        // Unlike the rear pair this is a wheel sensor, not the inverter,
+        // so the signal configuration already scales it to m/s.
+        if (CAN_ExtractSignal(data, &SIG_WHEEL_SPEED_SENSOR, &val)) {
+            Vehicle.WheelSpeed.SpeedFL = val;
+            Vehicle.WheelSpeed.IsConnectedFL = true;
+            Vehicle.WheelSpeed.LastMsgTickFL = HAL_GetTick();
+        }
+    }
+    // Checking front right wheel speed (ID 0x641)
+    if (pHeader->IDE == CAN_ID_STD && pHeader->StdId == 0x641) {
+        float val;
+        if (CAN_ExtractSignal(data, &SIG_WHEEL_SPEED_SENSOR, &val)) {
+            Vehicle.WheelSpeed.SpeedFR = val;
+            Vehicle.WheelSpeed.IsConnectedFR = true;
+            Vehicle.WheelSpeed.LastMsgTickFR = HAL_GetTick();
         }
     }
 }
@@ -230,7 +297,8 @@ void CAN_ProcessIncoming(void) {
  * - Bank 0: Charger (Extended ID: 0x1806E5F4)
  * - Bank 1: Jetson (Standard ID: 0x200)
  * - Bank 2: PRND (Standard ID: 0x3e1)
- * - Bank 3: Wheel Speed (Standard ID: 0x1A6, 0x1A7)
+ * - Bank 3: Rear Wheel Speed (Standard ID: 0x1A6, 0x1A7)
+ * - Bank 4: Front Wheel Speed (Standard ID: 0x661, 0x641)
  * * After configuring the filters to route accepted messages into RX FIFO0,
  * it activates the FIFO0 message pending interrupt and starts the CAN module.
  *
@@ -298,7 +366,15 @@ void CAN_Custom_Init(CAN_HandleTypeDef *hcan) {
     filterConfig.FilterMaskIdHigh = (0x1A7 << 5);  // slot 2: RR (w list mode = drugi ID)
     filterConfig.FilterMaskIdLow  = 0;
     if (HAL_CAN_ConfigFilter(hcan, &filterConfig) != HAL_OK) { Error_Handler(); }
-    
+
+    // FILTER 5 - Front Wheel Speed (ID 0x661 + 0x641) -> BANK 4 (para w jednym banku, ID LIST)
+    filterConfig.FilterBank = 4;
+    filterConfig.FilterIdHigh     = (0x661 << 5);  // slot 1: FL
+    filterConfig.FilterIdLow      = 0;
+    filterConfig.FilterMaskIdHigh = (0x641 << 5);  // slot 2: FR (w list mode = drugi ID)
+    filterConfig.FilterMaskIdLow  = 0;
+    if (HAL_CAN_ConfigFilter(hcan, &filterConfig) != HAL_OK) { Error_Handler(); }
+
     // Turning on interrupts and CAN
     if (HAL_CAN_ActivateNotification(hcan, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK) {
         Error_Handler();

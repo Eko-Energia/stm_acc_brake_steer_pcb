@@ -55,6 +55,12 @@ typedef struct {
     	uint32_t LastMsgTick;		///< Timestamp (HAL_GetTick) of the last received CAN frame.
     } PRND;
 
+	/**
+	 * @brief Wheel speeds [m/s].
+	 * Rear values come from the inverter RPM frames (0x1A6, 0x1A7), front ones
+	 * from the wheel speed sensors (0x661, 0x641). Different sources and
+	 * different raw scaling, the same physical quantity.
+	 */
 	struct {
 		float SpeedRL;
 		bool IsConnectedRL;
@@ -63,7 +69,25 @@ typedef struct {
 		float SpeedRR;
 		bool IsConnectedRR;
 		uint32_t LastMsgTickRR;
+
+		float SpeedFL;
+		bool IsConnectedFL;
+		uint32_t LastMsgTickFL;
+
+		float SpeedFR;
+		bool IsConnectedFR;
+		uint32_t LastMsgTickFR;
 	} WheelSpeed;
+
+	/**
+	 * @brief Steering rack position, from the absolute encoder in the
+	 * Dashboard frame (0x3E1) that already carries PRND.
+	 */
+	struct {
+		int16_t RackMm;				///< Displacement from the centred rack [mm]. Positive means a left turn.
+		bool IsConnected;			///< Connection flag (Watchdog). True if valid frames received recently.
+		uint32_t LastMsgTick;		///< Timestamp (HAL_GetTick) of the last received CAN frame.
+	} Steering;
 
 	/**
 	 * @brief Latest mapped driver-input percentages (0-100).
