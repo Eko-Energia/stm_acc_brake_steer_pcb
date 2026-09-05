@@ -181,10 +181,6 @@ void Jetson_GetData(uint8_t *data, void *context);
  */
 void EngineThrottle_GetData(uint8_t *data, void *context);
 
-// ============================================================================
-// TORQUE VECTORING
-// ============================================================================
-
 /**
  * @brief  Sets how much of the calculated torque split reaches the wheels.
  *
@@ -205,11 +201,9 @@ bool TorqueVectoring_SetGain(uint8_t gainPercent);
 
 /**
  * @brief  Returns the active torque vectoring gain.
- *
  * @details Defaults to @ref TV_CONFIG_GAIN_DEFAULT until a new value arrives.
  *
  * @return uint8_t Gain in percent, 0 - @ref TV_CONFIG_GAIN_MAX.
  */
 uint8_t TorqueVectoring_GetGain(void);
-
 #endif

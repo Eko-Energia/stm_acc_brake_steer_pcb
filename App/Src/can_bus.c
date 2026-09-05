@@ -80,13 +80,9 @@ const CAN_SignalConfig_t SIG_ABSOLUTE_ENCODER = {
 /** @brief Absolute encoder count read with the steering rack centred. */
 #define ENCODER_CENTER_RAW (8192)
 
-/**
- * @brief Rack displacement per encoder count, as the fraction 35/4096 mm.
- * @details The full 16384-count sweep of the encoder (+-540 deg at the wheel)
- * moves the rack across its whole calibrated range of +-70 mm, so
- * 140 mm / 16384 counts reduces to 35 / 4096. Correct this pair once the
- * steering ratio is measured on the car.
- */
+/** @brief Rack displacement per encoder count [mm]: the 16384-count sweep
+ *         (+-540 deg) covers the calibrated +-70 mm, so 140/16384 = 35/4096.
+ *         Correct this pair once the steering ratio is measured on the car. */
 #define ENCODER_RACK_MM_NUM (35)
 #define ENCODER_RACK_MM_DEN (4096)
 
@@ -193,9 +189,8 @@ void CAN_ProcessFrame(CAN_RxHeaderTypeDef *pHeader, uint8_t* data) {
 			Vehicle.PRND.IsConnected = true;
 		}
 
-    	// Steering rack position rides in the same frame as PRND, so it needs
-    	// no filter of its own. Kept in integer millimetres: that is what the
-    	// torque vectoring expects, and the encoder scaling divides exactly.
+    	// Steering rack position rides in the same frame as PRND, so it needs no
+    	// filter of its own. Kept in whole millimetres, the unit torque vectoring takes.
     	if (CAN_ExtractSignal(data, &SIG_ABSOLUTE_ENCODER, &val))
 		{
     		int32_t encoderOffset = (int32_t)val - ENCODER_CENTER_RAW;
@@ -228,8 +223,7 @@ void CAN_ProcessFrame(CAN_RxHeaderTypeDef *pHeader, uint8_t* data) {
     // Checking front left wheel speed (ID 0x661)
     if (pHeader->IDE == CAN_ID_STD && pHeader->StdId == 0x661) {
         float val;
-        // Unlike the rear pair this is a wheel sensor, not the inverter,
-        // so the signal configuration already scales it to m/s.
+        // A wheel sensor, not the inverter, so the signal config already gives m/s.
         if (CAN_ExtractSignal(data, &SIG_WHEEL_SPEED_SENSOR, &val)) {
             Vehicle.WheelSpeed.SpeedFL = val;
             Vehicle.WheelSpeed.IsConnectedFL = true;
