@@ -565,13 +565,19 @@ WheelCommands tv_calculate_rear_commands_from_rack(
         (uint64_t)vehicle_speed_mmps * vehicle_speed_mmps;
     const uint32_t grip_acceleration_mmps2 =
         (uint32_t)vehicle->friction_permille * vehicle->gravity_mmps2 / 1000U;
-    if (speed_squared > (uint64_t)radius_mm * grip_acceleration_mmps2) {
-        commands.status = TV_LATERAL_GRIP_EXCEEDED;
-        return commands;
-    }
+    /* Past mu*g the tyres cannot deliver more lateral force, so the load
+       transfer stops growing too. Capping here rather than refusing to
+       calculate keeps the split continuous: it rises with speed up to the grip
+       limit and then holds. Returning to an equal split at the limit would
+       step both rear commands by tens of percent of full scale in a single
+       frame, in the middle of a corner the car is already at the edge of. */
+    const bool grip_limited =
+        speed_squared > (uint64_t)radius_mm * grip_acceleration_mmps2;
+    commands.lateral_grip_limited = grip_limited;
 
     const uint32_t lateral_acceleration_mmps2 =
-        (uint32_t)divide_rounded_u64(speed_squared, radius_mm);
+        grip_limited ? grip_acceleration_mmps2
+                     : (uint32_t)divide_rounded_u64(speed_squared, radius_mm);
     commands.lateral_acceleration_mmps2 = lateral_acceleration_mmps2;
 
     /* Common scale factors cancel in the inner/outer torque ratio. Proxies
@@ -640,8 +646,6 @@ const char *tv_status_string(TvStatus status)
     switch (status) {
     case TV_OK:
         return "ok";
-    case TV_LATERAL_GRIP_EXCEEDED:
-        return "lateral grip exceeded";
     case TV_RACK_OUT_OF_RANGE:
         return "rack displacement outside calibration range";
     case TV_SPEED_OUT_OF_RANGE:

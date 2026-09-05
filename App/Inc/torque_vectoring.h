@@ -68,9 +68,6 @@ typedef enum {
     /** Calculation succeeded; outputs may be applied. */
     TV_OK = 0,
 
-    /** Requested speed and radius exceed mu*g; outputs equal command_min. */
-    TV_LATERAL_GRIP_EXCEEDED,
-
     /** Non-zero rack value is outside the calibrated range. */
     TV_RACK_OUT_OF_RANGE,
 
@@ -97,8 +94,18 @@ typedef struct {
     /** Unsigned fitted turn radius [mm]; 0 in fallback or error. */
     uint32_t turn_radius_mm;
 
-    /** Calculated lateral acceleration [mm/s^2]. */
+    /**
+     * Lateral acceleration used for the split [mm/s^2], capped at mu*g.
+     * Above the grip limit this is the cap, not v^2/R.
+     */
     uint32_t lateral_acceleration_mmps2;
+
+    /**
+     * True when speed and radius put the car past mu*g, so the value above was
+     * capped and the split is held at its maximum instead of growing further.
+     * Diagnostic only - the commands stay valid and applicable.
+     */
+    bool lateral_grip_limited;
 
     /** True when an unequal torque split was calculated. */
     bool torque_vectoring_active;

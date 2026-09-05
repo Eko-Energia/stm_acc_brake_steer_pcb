@@ -198,10 +198,11 @@ static void torqueVectoringSplit(int16_t pedalCommand, int16_t *leftCommand, int
 			Vehicle.Steering.IsConnected, Vehicle.Steering.RackMm, speedMmps,
 			pedalCommand, tvGainPercent);
 
-	// Only a complete calculation may change the commands. Every other status,
-	// TV_LATERAL_GRIP_EXCEEDED included, keeps the equal split the car drives on
-	// today, so this never takes torque away. Add that status here to let the
-	// algorithm cut the torque at the lateral grip limit instead.
+	// Only a complete calculation may change the commands; a rejected input
+	// keeps the equal split the car drives on today. Being past the grip limit
+	// is no longer one of those cases - the algorithm caps the load transfer
+	// and holds the split there, so the commands stay continuous instead of
+	// jumping back to 50/50 mid-corner. See split.lateral_grip_limited.
 	const bool applySplit = (TV_OK == split.status);
 
 	*leftCommand = applySplit ? (int16_t)split.rear_left : pedalCommand;
