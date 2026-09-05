@@ -27,10 +27,10 @@
 typedef struct {
 	/**
 	 * @brief CURRENTLY NOT USED PART Charger subsystem status.
-	 * Handles communication watchdog and status flags for the external charger.
+	 * Holds the status flags for the external charger.
 	 */
     struct {
-    	bool 		IsConnected;  	///< Connection flag (Watchdog). True if valid frames received recently.
+    	bool 		IsConnected;  	///< True after the first frame. NOT a watchdog: nothing clears it, so it says nothing about freshness.
 		uint8_t  	RawStatus;    	///< Current status/command. See @ref ChargerState_e.
 		uint32_t 	LastMsgTick;  	///< Timestamp (HAL_GetTick) of the last received CAN frame.
     } Charger;
@@ -41,20 +41,25 @@ typedef struct {
 	 */
     struct {
         uint8_t  	RawData[8];   	///< Buffer for raw data received from Jetson
-        bool     	IsConnected;	///< Connection flag. True if Jetson is alive.
+        bool     	IsConnected;	///< True after the first frame. NOT a watchdog: nothing clears it, so it says nothing about freshness.
         uint32_t 	LastMsgTick;	///< Timestamp of the last received heartbeat/control frame.
     } Jetson;
 
     /**
 	 * @brief PRND subsystem status.
-	 * Handles communication watchdog and status flags for PRND.
+	 * Holds the gear selector status flags.
 	 */
     struct {
-    	bool IsConnected; 			///< Connection flag (Watchdog). True if valid frames received recently.
+    	bool IsConnected; 			///< True after the first frame. NOT a watchdog: nothing clears it, so it says nothing about freshness.
     	uint8_t RawStatus;			///< Current status/command.
     	uint32_t LastMsgTick;		///< Timestamp (HAL_GetTick) of the last received CAN frame.
     } PRND;
 
+	/**
+	 * @brief Wheel speeds [m/s] and their per-wheel connection flags.
+	 * Every IsConnected* below behaves like the ones above: set true by the
+	 * first frame and never cleared. Do not read them as freshness.
+	 */
 	struct {
 		float SpeedRL;
 		bool IsConnectedRL;
@@ -78,7 +83,7 @@ typedef struct {
 	/** @brief Steering rack position, read from the same frame as PRND. */
 	struct {
 		int16_t RackMm;				///< Displacement from the centred rack [mm]. Positive means a left turn.
-		bool IsConnected;			///< Connection flag (Watchdog). True if valid frames received recently.
+		bool IsConnected;			///< True after the first frame. NOT a watchdog: nothing clears it, so it says nothing about freshness.
 		uint32_t LastMsgTick;		///< Timestamp (HAL_GetTick) of the last received CAN frame.
 	} Steering;
 
