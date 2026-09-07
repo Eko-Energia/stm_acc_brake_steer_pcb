@@ -161,6 +161,11 @@ int main(void)
 /*  @brief Main infinite loop.*/
   while (1)
   {
+	  /* @brief Frees Tx mailboxes pinned by an un-acknowledged retransmission
+	   * and samples bus health. Must run BEFORE the scheduler, so a mailbox
+	   * released now is available to this pass instead of the next one. */
+	  CAN_HandleTxWatchdog(&hcan);
+
 	  /* @brief Turning on CAN scheduler from EKO CAN Driver. */
 	  CAN_HandleScheduled(&hcan, &canScheduler);
 

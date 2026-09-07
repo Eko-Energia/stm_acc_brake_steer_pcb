@@ -19,7 +19,32 @@
  
  #define CAN_MAX_DLC (8)
  #define CAN_MAX_MSG (32)
- 
+
+ /**
+  * @brief Maximum time a frame may occupy a Tx mailbox before it is aborted.
+  *
+  * @details With AutoRetransmission enabled bxCAN keeps retrying a frame that
+  * is not acknowledged, holding its mailbox indefinitely. Three such frames
+  * pin all three mailboxes and every further AddTxMessage() fails.
+  *
+  * Must stay SHORTER than the shortest periodic frame (95 ms). Otherwise two
+  * generations of the same ID end up in two mailboxes, and because
+  * TransmitFifoPriority is DISABLE bxCAN transmits by identifier - not by
+  * request order - so the newer torque value can leave before the older one.
+  *
+  * 20 ms is ~74 frame slots at 500 kbit/s: a frame that cannot leave within
+  * that window is facing a broken bus, not a busy one.
+  */
+ #define CAN_TX_TIMEOUT_MS (20u)
+
+ /** @brief Number of bxCAN transmit mailboxes. Fixed by the peripheral. */
+ #define CAN_TX_MAILBOX_COUNT (3u)
+
+ /** @brief @ref CAN_Diag_t flags, mirroring the matching CAN_ESR bits. */
+ #define CAN_DIAG_FLAG_EWGF (1u << 0) /**< Error warning (TEC or REC >= 96). */
+ #define CAN_DIAG_FLAG_EPVF (1u << 1) /**< Error passive (TEC or REC > 127). */
+ #define CAN_DIAG_FLAG_BOFF (1u << 2) /**< Bus-off (TEC > 255). */
+
  /**
   * @brief Generic macro to swap endianness based on variable type.~
   * 
@@ -92,16 +117,54 @@
  };
  
  /**
+  * @brief Bus health snapshot, refreshed by @ref CAN_HandleTxWatchdog.
+  *
+  * @details Read-only diagnostics. Nothing in the control path depends on it -
+  * it exists so a bus fault leaves a trace: with ABOM enabled the hardware
+  * recovers from bus-off on its own and would otherwise do so silently.
+  */
+ struct CAN_Diag
+ {
+	 uint8_t  tec;            /**< Transmit error counter (CAN_ESR[23:16]). */
+	 uint8_t  rec;            /**< Receive error counter (CAN_ESR[31:24]). */
+	 uint8_t  lastErrorCode;  /**< LEC (CAN_ESR[6:4]). 3 = acknowledgement error. */
+	 uint8_t  flags;          /**< CAN_DIAG_FLAG_* bitmask. */
+	 uint16_t txAbortCount;   /**< Mailboxes killed by the watchdog. */
+	 uint16_t busOffCount;    /**< Bus-off entries, counted on the rising edge. */
+	 uint16_t txFailCount;    /**< AddTxMessage() rejections (all mailboxes busy). */
+ };
+
+ /**
   * Setup functions
   */
- 
+
  /**
   * @brief Initialize CAN peripheral
   *
   * @param hcanPtr   Pointer to CAN handle
   */
  void CAN_Init(CAN_HandleTypeDef *hcan);
- 
+
+ /**
+  * @brief Free Tx mailboxes stuck past @ref CAN_TX_TIMEOUT_MS and sample bus health.
+  *
+  * @details Call from the main loop, before @ref CAN_HandleScheduled.
+  *
+  * Mailbox state is read from TSR rather than tracked at the AddTxMessage()
+  * call sites, so frames sent outside the scheduler - the NMT command from
+  * engine_control.c - are covered by the same watchdog.
+  *
+  * @param hcanPtr   Pointer to CAN handle
+  */
+ void CAN_HandleTxWatchdog(CAN_HandleTypeDef *hcanPtr);
+
+ /**
+  * @brief Access the diagnostics snapshot.
+  *
+  * @return const struct CAN_Diag* Never NULL.
+  */
+ const struct CAN_Diag *CAN_GetDiag(void);
+
  /**
   * Functions for scheduled messages
   */

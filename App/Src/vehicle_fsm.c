@@ -173,6 +173,59 @@ void EngineThrottle_GetData(uint8_t *data, void *context ) {
 // FINITE STATE MACHINE (FSM)
 // ============================================================================
 
+/**
+ * @brief  NMT command awaiting a free transmit mailbox.
+ *
+ * @details Deliberately kept OUTSIDE the "state changed" block, because the two
+ * things run at different rates:
+ *
+ *  - rebuilding the scheduler must happen ONCE on entering a state; repeating it
+ *    re-runs CAN_RemoveScheduledMsg()/CAN_AddScheduledMsg(), and the add resets
+ *    lastTick, so a frame re-added every loop pass never reaches its deadline
+ *    and is never transmitted;
+ *  - a safety command must be retried until it actually reaches the bus.
+ *
+ * Gating the retry on lastState would have starved 0x41 exactly that way.
+ */
+typedef enum {
+	NMT_CMD_NONE = 0,
+	NMT_CMD_START,
+	NMT_CMD_NEUTRAL,
+	NMT_CMD_STOP
+} NmtCmd_e;
+
+static NmtCmd_e nmtPending = NMT_CMD_NONE;
+
+/**
+ * @brief  Try to deliver the pending NMT command.
+ *
+ * @details The engine flag is set only after the frame is accepted by the
+ * peripheral. Setting it unconditionally would make the FSM treat an undelivered
+ * safety command as delivered and never send it again.
+ */
+static void serviceNmt(void)
+{
+	// Initialised even though every path below assigns them: some GCC versions
+	// cannot prove the default branch returns and warn about maybe-uninitialized.
+	HAL_StatusTypeDef status = HAL_ERROR;
+	EngineState_e flagOnSuccess = ENGINE_STOP_NEUTRAL;
+
+	switch (nmtPending)
+	{
+		case NMT_CMD_START:   status = startEngine();   flagOnSuccess = ENGINE_RUN;          break;
+		case NMT_CMD_NEUTRAL: status = neutralEngine(); flagOnSuccess = ENGINE_STOP_NEUTRAL; break;
+		case NMT_CMD_STOP:    status = stopEngine();    flagOnSuccess = ENGINE_STOP_BLOCKED; break;
+		default: return;
+	}
+
+	if (status == HAL_OK)
+	{
+		setEngineFlag(flagOnSuccess);
+		nmtPending = NMT_CMD_NONE;
+	}
+	// Otherwise the command stays pending and is retried on the next pass.
+	// CAN_HandleTxWatchdog() frees a pinned mailbox within CAN_TX_TIMEOUT_MS.
+}
 
 void stateActions()
 {
@@ -217,8 +270,12 @@ void stateActions()
             .context = NULL
         };
         CAN_AddScheduledMsg(&msgJetson, &canScheduler);
-        
+
         bool isBad = 0;
+
+        // A command decided in the previous state is stale - the new state
+        // decides again below, or leaves no command at all.
+        nmtPending = NMT_CMD_NONE;
 
         // 2. NEW TASKS FOR THE CURRENT STATE
         switch(currentState) {
@@ -241,8 +298,7 @@ void stateActions()
             case JTSN_DOWN_DRIVE_STATE: {
                 // NMT (Start) frame is a one-shot signal - bypassing the periodic driver
                 if (getEngineFlag() != ENGINE_RUN) {
-                    startEngine();
-                    setEngineFlag(ENGINE_RUN);
+                    nmtPending = NMT_CMD_START;   // sent by serviceNmt(), retried until it lands
                 }
 
                 // Add periodic torque transmission to the driver
@@ -275,8 +331,7 @@ void stateActions()
             		break;
             	}
 				if (getEngineFlag() != ENGINE_STOP_NEUTRAL) {
-					neutralEngine(); // NMT (Neutral) frame - one-shot
-					setEngineFlag(ENGINE_STOP_NEUTRAL);
+					nmtPending = NMT_CMD_NEUTRAL; // sent by serviceNmt(), retried until it lands
 				}
                 break;
             }
@@ -288,8 +343,7 @@ void stateActions()
             		break;
             	}
 				if (getEngineFlag() != ENGINE_STOP_BLOCKED) {
-					stopEngine(); // NMT (Stop) frame - one-shot
-					setEngineFlag(ENGINE_STOP_BLOCKED);
+					nmtPending = NMT_CMD_STOP;    // sent by serviceNmt(), retried until it lands
 				}
 			break;
             }
@@ -304,4 +358,8 @@ void stateActions()
         	lastState = currentState;
         }
     }
+
+    // Outside the state-change block on purpose: retried every pass until the
+    // command reaches a mailbox, without touching the scheduler.
+    serviceNmt();
 }

@@ -53,13 +53,14 @@ void setEngineFlag(uint8_t engineFlag)
  */
 
 //maybe send below frames a few times to make sure it'll get to the desired target
-void startEngine()
+HAL_StatusTypeDef startEngine(void)
 {
 	TxDataNMT[0] = 0x01; //puts engines in the operating mode
-	if (HAL_CAN_AddTxMessage(&hcan, &TxHeaderNMT, TxDataNMT, &TxMailBox) != HAL_OK)
-	{
-	  Error_Handler();
-	}
+	/* Status instead of Error_Handler(): all three mailboxes being busy is a
+	 * transient bus condition, not a fatal MCU fault. Halting the CPU here
+	 * killed the board on the first gear change once AutoRetransmission
+	 * started pinning mailboxes. Retry is owned by stateActions(). */
+	return HAL_CAN_AddTxMessage(&hcan, &TxHeaderNMT, TxDataNMT, &TxMailBox);
 }
 
 // We have to test the engines in order to confirm the statement below
@@ -70,21 +71,23 @@ void startEngine()
  * This safely disables the motor output ensuring safe stop.
  * * @note   Uses the global `TxHeaderNMT`.
  */
-void stopEngine()
+HAL_StatusTypeDef stopEngine(void)
 {
 	TxDataNMT[0]= 0x02; //stops inverters immediately and blocks them
-	if (HAL_CAN_AddTxMessage(&hcan, &TxHeaderNMT, TxDataNMT, &TxMailBox) != HAL_OK)
-	{
-	  Error_Handler();
-	}
+	/* Status instead of Error_Handler(): all three mailboxes being busy is a
+	 * transient bus condition, not a fatal MCU fault. Halting the CPU here
+	 * killed the board on the first gear change once AutoRetransmission
+	 * started pinning mailboxes. Retry is owned by stateActions(). */
+	return HAL_CAN_AddTxMessage(&hcan, &TxHeaderNMT, TxDataNMT, &TxMailBox);
 }
 
-void neutralEngine()
+HAL_StatusTypeDef neutralEngine(void)
 {
 	TxDataNMT[0]= 0x80; //puts engines in the NEUTRAL mode to make a safe stop
-	if (HAL_CAN_AddTxMessage(&hcan, &TxHeaderNMT, TxDataNMT, &TxMailBox) != HAL_OK)
-	{
-	  Error_Handler();
-	}
+	/* Status instead of Error_Handler(): all three mailboxes being busy is a
+	 * transient bus condition, not a fatal MCU fault. Halting the CPU here
+	 * killed the board on the first gear change once AutoRetransmission
+	 * started pinning mailboxes. Retry is owned by stateActions(). */
+	return HAL_CAN_AddTxMessage(&hcan, &TxHeaderNMT, TxDataNMT, &TxMailBox);
 }
 

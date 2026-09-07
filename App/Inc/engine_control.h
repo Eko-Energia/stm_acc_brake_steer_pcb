@@ -74,21 +74,21 @@ void setEngineFlag(uint8_t engineFlag);
  * @details Transmits `0x01` on ID 0x000. This enables the inverter's power stage
  * and allows it to process torque commands.
  */
-void startEngine(void);
+HAL_StatusTypeDef startEngine(void);
 
 /**
  * @brief  Sends the "Pre-Operational" NMT command to the inverter.
  * @details Transmits `0x02` on ID 0x0.
  * This disables and blocks the inverter output immediately.
  */
-void stopEngine(void);
+HAL_StatusTypeDef stopEngine(void);
 
 /**
  * @brief  Sends the " "Pre-Operational" NMT command to the inverter.
  * @details Transmits 0x80 depending on protocol on ID 0x0.
  * This disables the inverter output immediately without blocking it.
  */
-void neutralEngine(void);
+HAL_StatusTypeDef neutralEngine(void);
 
 
 #endif

@@ -22,7 +22,28 @@
  #else
  #define ERROR_HANDLER_AVAILABLE (0)
  #endif
- 
+
+ /** @brief Tick at which each Tx mailbox was first seen occupied. */
+ static uint32_t txBusySince[CAN_TX_MAILBOX_COUNT];
+
+ /** @brief Bitmask of mailboxes currently being timed. */
+ static uint8_t txTracked;
+
+ /** @brief Bus health snapshot, published through CAN_GetDiag(). */
+ static struct CAN_Diag canDiag;
+
+ /** @brief TSR "mailbox empty" flags, indexed by mailbox number. */
+ static const uint32_t txEmptyFlag[CAN_TX_MAILBOX_COUNT] =
+ {
+	 CAN_TSR_TME0, CAN_TSR_TME1, CAN_TSR_TME2
+ };
+
+ /** @brief HAL mailbox selectors, indexed by mailbox number. */
+ static const uint32_t txMailboxId[CAN_TX_MAILBOX_COUNT] =
+ {
+	 CAN_TX_MAILBOX0, CAN_TX_MAILBOX1, CAN_TX_MAILBOX2
+ };
+
  void CAN_Init(CAN_HandleTypeDef *hcanPtr)
  {
 	 if (HAL_CAN_ActivateNotification(hcanPtr, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK)
@@ -105,18 +126,93 @@
 	 return HAL_ERROR;
  }
  
+ const struct CAN_Diag *CAN_GetDiag(void)
+ {
+	 return &canDiag;
+ }
+
+ void CAN_HandleTxWatchdog(CAN_HandleTypeDef *hcanPtr)
+ {
+	 if (hcanPtr == NULL)
+	 {
+		 return;
+	 }
+
+	 uint32_t now = HAL_GetTick();
+	 uint32_t tsr = READ_REG(hcanPtr->Instance->TSR);
+	 uint32_t esr = READ_REG(hcanPtr->Instance->ESR);
+
+	 /* --- Bus health --- */
+
+	 canDiag.tec           = (uint8_t)((esr & CAN_ESR_TEC) >> CAN_ESR_TEC_Pos);
+	 canDiag.rec           = (uint8_t)((esr & CAN_ESR_REC) >> CAN_ESR_REC_Pos);
+	 canDiag.lastErrorCode = (uint8_t)((esr & CAN_ESR_LEC) >> CAN_ESR_LEC_Pos);
+
+	 uint8_t flags = 0;
+	 if ((esr & CAN_ESR_EWGF) != 0u) { flags |= CAN_DIAG_FLAG_EWGF; }
+	 if ((esr & CAN_ESR_EPVF) != 0u) { flags |= CAN_DIAG_FLAG_EPVF; }
+	 if ((esr & CAN_ESR_BOFF) != 0u) { flags |= CAN_DIAG_FLAG_BOFF; }
+
+	 /* Counted on the rising edge only: with ABOM the hardware leaves bus-off
+	  * by itself after 128x11 recessive bits (~2.8 ms at 500 kbit/s), so this
+	  * counter is the only evidence the event ever happened. */
+	 if (((flags & CAN_DIAG_FLAG_BOFF) != 0u) &&
+		 ((canDiag.flags & CAN_DIAG_FLAG_BOFF) == 0u))
+	 {
+		 canDiag.busOffCount++;
+	 }
+	 canDiag.flags = flags;
+
+	 /* --- Mailbox watchdog --- */
+
+	 for (uint8_t i = 0; i < CAN_TX_MAILBOX_COUNT; i++)
+	 {
+		 if ((tsr & txEmptyFlag[i]) != 0u)
+		 {
+			 /* Mailbox free - the frame left or a previous abort took effect. */
+			 txTracked &= (uint8_t)~(1u << i);
+			 continue;
+		 }
+
+		 if ((txTracked & (1u << i)) == 0u)
+		 {
+			 /* First time seen occupied: start the clock, do not abort yet. */
+			 txBusySince[i] = now;
+			 txTracked |= (uint8_t)(1u << i);
+			 continue;
+		 }
+
+		 /* Subtraction, not addition: stays correct across the 49.7 day
+		  * HAL_GetTick() wrap, where lastTick + timeout would overflow. */
+		 if ((now - txBusySince[i]) >= CAN_TX_TIMEOUT_MS)
+		 {
+			 (void)HAL_CAN_AbortTxRequest(hcanPtr, txMailboxId[i]);
+			 canDiag.txAbortCount++;
+
+			 /* Stop tracking: ABRQ is a request, so the mailbox may stay busy
+			  * for another frame time. Re-arming here would abort whatever
+			  * lands in it next. The next pass re-detects it as a fresh
+			  * occupancy and gives it a full timeout of its own. */
+			 txTracked &= (uint8_t)~(1u << i);
+		 }
+	 }
+ }
+
  void CAN_HandleScheduled(CAN_HandleTypeDef *hcanPtr, struct CAN_scheduledMsgList *scheduler)
  {
 	 if (hcanPtr == NULL || scheduler == NULL)
 	 {
 		 return;
 	 }
- 
+
 	 uint32_t currentTick = HAL_GetTick();
 	 for (uint8_t i = 0; i < scheduler->size; i++)
 	 {
 		 struct CAN_scheduledMsg *msg = &scheduler->list[i];
-		 if (currentTick > msg->lastTick + msg->periodMs)
+		 /* Subtraction, not "currentTick > lastTick + periodMs": that form
+		  * overflows at the 49.7 day tick wrap and then fires every single
+		  * loop pass for a whole period, flooding the Tx mailboxes. */
+		 if ((currentTick - msg->lastTick) >= msg->periodMs)
 		 {
 			 uint8_t data[CAN_MAX_DLC];
 			 // Initialize data to 0 to be safe
@@ -134,6 +230,7 @@
 			 {
 				 // Mailbox full: keep lastTick so this ID is retried next loop,
 				 // but still try the remaining scheduled frames.
+				 canDiag.txFailCount++;
 				 continue;
 			 }
 
