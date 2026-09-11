@@ -216,10 +216,12 @@ static void torqueVectoringSplit(int16_t pedalCommand, int16_t *leftCommand, int
 void Jetson_GetData(uint8_t *data, void *context) {
     (void)context;
     // Pack values already computed in stateActions(); do not remap ADC here.
-    data[steerValIndex] 		= Vehicle.Pedals.Steer;
     data[brakePistonsValIndex] 	= Vehicle.Pedals.BrakePistons;
     data[brakeHallValIndex] 	= Vehicle.Pedals.BrakeHall;
     data[accelPedalValIndex] 	= Vehicle.Pedals.Accel;
+    // Intel (little-endian): LSB first, then MSB.
+    data[steerValIndex]         = (uint8_t)Vehicle.Pedals.Steer & TH_mask;
+    data[steerValIndex + 1]     = (uint8_t)(Vehicle.Pedals.Steer >> TH_bitpos) & TH_mask;
 }
 
 void EngineThrottle_GetData(uint8_t *data, void *context ) {

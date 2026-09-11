@@ -89,7 +89,7 @@ typedef struct {
 	 * Updated in the main loop; packed into the Jetson CAN frame by Jetson_GetData().
 	 */
 	struct {
-		uint8_t Steer;
+		uint16_t Steer;
 		uint8_t BrakePistons;
 		uint8_t BrakeHall;
 		uint8_t Accel;

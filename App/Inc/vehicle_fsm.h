@@ -27,10 +27,10 @@
 
 /** @brief Macros for data[] indexing in Jetson_GetData function.
  * */
-#define steerValIndex (0)
-#define brakePistonsValIndex (1)
-#define brakeHallValIndex (2)
-#define accelPedalValIndex (3)
+#define brakePistonsValIndex (0)
+#define brakeHallValIndex (1)
+#define accelPedalValIndex (2)
+#define steerValIndex (3)
 /**
  * @brief  Global Vehicle State Object.
  *
@@ -152,11 +152,12 @@ void stateActions(void);
  * It only packs already mapped percentages from @ref Vehicle.Pedals.
  * Mapping itself is done once per cycle in @ref stateActions.
  * * Byte mapping:
- * - Byte 0: Steering angle
- * - Byte 1: Brake pistons pressure
- * - Byte 2: Brake Hall sensor status
- * - Byte 3: Accelerator pedal position
- * - Bytes 4-7: Reserved (Zeroed by the driver automatically)
+ * - Byte 0: Brake pistons pressure
+ * - Byte 1: Brake Hall sensor status
+ * - Byte 2: Accelerator pedal position
+ * - Byte 3: Steering angle LSB (Intel / little-endian)
+ * - Byte 4: Steering angle MSB
+ * - Bytes 5-7: Reserved (Zeroed by the driver automatically)
  *
  * @param[out] data    Pointer to the 8-byte payload buffer provided by the CAN driver.
  * @param[in]  context Optional user context pointer (currently unused, expected NULL).
