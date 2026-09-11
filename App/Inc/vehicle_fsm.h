@@ -20,6 +20,7 @@
 #include "can_driver.h"
 #include "torque_vectoring.h"
 #include "tv_config.h"
+#include "sensors.h"
 
 #define TH_mask (0xFF)
 #define TH_bitpos (8)
@@ -155,8 +156,8 @@ void stateActions(void);
  * - Byte 0: Brake pistons pressure
  * - Byte 1: Brake Hall sensor status
  * - Byte 2: Accelerator pedal position
- * - Byte 3: Steering angle LSB (Intel / little-endian)
- * - Byte 4: Steering angle MSB
+ * - Byte 3: Steering rack displacement LSB (signed mm, Intel / little-endian)
+ * - Byte 4: Steering rack displacement MSB
  * - Bytes 5-7: Reserved (Zeroed by the driver automatically)
  *
  * @param[out] data    Pointer to the 8-byte payload buffer provided by the CAN driver.

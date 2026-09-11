@@ -172,8 +172,11 @@ int main(void)
 
 	  /* @brief Execute vehicle logic. */
 	  stateActions();
+
+	  Vehicle.Pedals.Steer = Get_SteeringValue();
   }
-  }
+
+}
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

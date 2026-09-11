@@ -219,9 +219,10 @@ void Jetson_GetData(uint8_t *data, void *context) {
     data[brakePistonsValIndex] 	= Vehicle.Pedals.BrakePistons;
     data[brakeHallValIndex] 	= Vehicle.Pedals.BrakeHall;
     data[accelPedalValIndex] 	= Vehicle.Pedals.Accel;
-    // Intel (little-endian): LSB first, then MSB.
-    data[steerValIndex]         = (uint8_t)Vehicle.Pedals.Steer & TH_mask;
-    data[steerValIndex + 1]     = (uint8_t)(Vehicle.Pedals.Steer >> TH_bitpos) & TH_mask;
+    // Intel (little-endian) two's complement: LSB first, then MSB.
+    const uint16_t steerBits = (uint16_t)Vehicle.Pedals.Steer;
+    data[steerValIndex]         = (uint8_t)steerBits & TH_mask;
+    data[steerValIndex + 1]     = (uint8_t)(steerBits >> TH_bitpos) & TH_mask;
 }
 
 void EngineThrottle_GetData(uint8_t *data, void *context ) {
@@ -280,7 +281,7 @@ void stateActions()
     // Map ADC once per cycle. Jetson_GetData() only packs this snapshot.
     // Do not run plausibility checks here — EH_report() would force Neutral
     // and CAN_RemoveScheduledMsg() would delete 0x226/0x227/0x41 before they fire.
-    Vehicle.Pedals.Steer        = steerValue(&ADC1_VAL[2]);
+    Vehicle.Pedals.Steer        = Get_SteeringValue();
     Vehicle.Pedals.BrakePistons = brakePistonsValue(&ADC1_VAL[1], &ADC2_VAL[1]);
     Vehicle.Pedals.BrakeHall    = brakeHallValue(&ADC2_VAL[2]);
 
