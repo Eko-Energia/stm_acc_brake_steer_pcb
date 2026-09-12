@@ -63,7 +63,26 @@ typedef struct {
 		float SpeedRR;
 		bool IsConnectedRR;
 		uint32_t LastMsgTickRR;
+
+		// Front speeds come from the wheel sensors, the rear pair from the
+		// inverter RPM: different sources, same quantity in m/s.
+		// IsConnectedFL/FR are set true by the first frame and never cleared,
+		// so do not read them as freshness.
+		float SpeedFL;
+		bool IsConnectedFL;
+		uint32_t LastMsgTickFL;
+
+		float SpeedFR;
+		bool IsConnectedFR;
+		uint32_t LastMsgTickFR;
 	} WheelSpeed;
+
+	/** @brief Steering rack position, read from the same frame as PRND. */
+	struct {
+		int16_t RackMm;				///< Displacement from the centred rack [mm]. Positive means a left turn.
+		bool IsConnected;			///< True after the first frame. NOT a watchdog: nothing clears it, so it says nothing about freshness.
+		uint32_t LastMsgTick;		///< Timestamp (HAL_GetTick) of the last received CAN frame.
+	} Steering;
 
 	/**
 	 * @brief Latest mapped driver-input percentages (0-100).

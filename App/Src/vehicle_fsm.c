@@ -19,6 +19,17 @@
 /** @brief Temporary variable for calculated torque before transmission. */
 int16_t tempTH = 0;
 
+/** @brief Rear wheel torque commands after the torque vectoring split. */
+static int16_t tempTHL = 0;
+static int16_t tempTHR = 0;
+
+/** @brief Torque vectoring gain [%]. Volatile: the setter may run in the CAN RX interrupt. */
+static volatile uint8_t tvGainPercent = TV_CONFIG_GAIN_DEFAULT;
+
+// The split works in inverter command units, so nothing is rescaled on the way out.
+_Static_assert(THROTTLE_MAX_VAL == TV_CONFIG_COMMAND_MAX,
+               "throttle curve and torque vectoring must share one command range");
+
 
 /**
  * @brief   Global instance of the Vehicle State.
@@ -115,6 +126,90 @@ MachineState_e machineState()
 
 
 // ============================================================================
+// TORQUE VECTORING
+// ============================================================================
+
+/** @brief Sets the torque vectoring gain. Documented in vehicle_fsm.h. */
+bool TorqueVectoring_SetGain(uint8_t gainPercent)
+{
+	// Rejecting rather than clamping lets the caller report the bad frame,
+	// and leaves the previous gain in force.
+	if (gainPercent > TV_CONFIG_GAIN_MAX)
+	{
+		return false;
+	}
+
+	tvGainPercent = gainPercent;
+	return true;
+}
+
+/** @brief Returns the active torque vectoring gain [%]. */
+uint8_t TorqueVectoring_GetGain(void)
+{
+	return tvGainPercent;
+}
+
+/** @brief Converts a wheel speed [m/s] to the [mm/s] magnitude the algorithm takes. */
+static uint32_t wheelSpeedMmps(float speedMps)
+{
+	// Direction is carried by the gear, not by the speed.
+	if (speedMps < 0.0f)
+	{
+		speedMps = -speedMps;
+	}
+
+	return (uint32_t)(speedMps * 1000.0f);
+}
+
+/**
+ * @brief  Splits one throttle command between the two rear wheels.
+ * @details Input and output are inverter command units, so this only changes how
+ * the demand is shared between the wheels - never the range of the frames
+ * themselves. The front wheels merely refine the speed estimate, so a missing
+ * front sensor degrades the result instead of stopping the split.
+ *
+ * @param[in]  pedalCommand Throttle command from @ref ThrottleCurve_Apply.
+ * @param[out] leftCommand  Command for the left rear wheel.
+ * @param[out] rightCommand Command for the right rear wheel.
+ */
+static void torqueVectoringSplit(int16_t pedalCommand, int16_t *leftCommand, int16_t *rightCommand)
+{
+	// Geometry never changes at runtime, so it is built once and reused.
+	static VehicleParameters tvVehicle;
+	static bool tvVehicleReady = false;
+
+	if (!tvVehicleReady)
+	{
+		tvVehicle = tv_default_vehicle();
+		tvVehicleReady = true;
+	}
+
+	const uint32_t rearLeftMmps = wheelSpeedMmps(Vehicle.WheelSpeed.SpeedRL);
+	const uint32_t rearRightMmps = wheelSpeedMmps(Vehicle.WheelSpeed.SpeedRR);
+	const uint32_t speedMmps =
+			(Vehicle.WheelSpeed.IsConnectedFL && Vehicle.WheelSpeed.IsConnectedFR)
+			? tv_com_velocity_from_wheel_speeds_mmps(&tvVehicle,
+					wheelSpeedMmps(Vehicle.WheelSpeed.SpeedFL),
+					wheelSpeedMmps(Vehicle.WheelSpeed.SpeedFR),
+					rearLeftMmps, rearRightMmps)
+			: tv_com_velocity_from_rear_wheels_mmps(&tvVehicle, rearLeftMmps, rearRightMmps);
+
+	const WheelCommands split = tv_calculate_rear_commands_from_rack(&tvVehicle,
+			Vehicle.Steering.IsConnected, Vehicle.Steering.RackMm, speedMmps,
+			pedalCommand, tvGainPercent);
+
+	// Only a complete calculation may change the commands; a rejected input
+	// keeps the equal split the car drives on today. Being past the grip limit
+	// is no longer one of those cases - the algorithm caps the load transfer
+	// and holds the split there, so the commands stay continuous instead of
+	// jumping back to 50/50 mid-corner. See split.lateral_grip_limited.
+	const bool applySplit = (TV_OK == split.status);
+
+	*leftCommand = applySplit ? (int16_t)split.rear_left : pedalCommand;
+	*rightCommand = applySplit ? (int16_t)split.rear_right : pedalCommand;
+}
+
+// ============================================================================
 // CAN DRIVER CALLBACKS (Data acquisition for periodic CAN frames)
 // ============================================================================
 
@@ -138,7 +233,7 @@ void EngineThrottle_GetData(uint8_t *data, void *context ) {
 	uint8_t which_engine = (uint32_t)context;
 
 	// localTH used for not tampering with the global one
-	int16_t localTH = tempTH;
+	int16_t localTH = (LEFT_ENGINE == which_engine) ? tempTHL : tempTHR;
 
 	if(Vehicle.WheelSpeed.SpeedRL != 0 || Vehicle.WheelSpeed.SpeedRR != 0)
 	{
@@ -200,6 +295,10 @@ void stateActions()
 	{
 		Vehicle.Pedals.Accel = accelPedalValue(&ADC1_VAL[0], &ADC2_VAL[0]);
 		tempTH = ThrottleCurve_Apply(Vehicle.Pedals.Accel);
+
+		// Split here for the same reason tempTH is: both inverter frames must
+		// be built from one reading.
+		torqueVectoringSplit(tempTH, &tempTHL, &tempTHR);
 	}
 
     // Execute actions ONLY when the gear or connection status changes

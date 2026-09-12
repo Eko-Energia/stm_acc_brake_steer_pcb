@@ -18,6 +18,8 @@
 #include "pedals_map.h"
 #include "engine_control.h"
 #include "can_driver.h"
+#include "torque_vectoring.h"
+#include "tv_config.h"
 
 #define TH_mask (0xFF)
 #define TH_bitpos (8)
@@ -178,4 +180,30 @@ void Jetson_GetData(uint8_t *data, void *context);
  * @param[in]  context Optional user context pointer (currently unused, expected NULL).
  */
 void EngineThrottle_GetData(uint8_t *data, void *context);
+
+/**
+ * @brief  Sets how much of the calculated torque split reaches the wheels.
+ *
+ * @details Blends between an open differential and the full split calculated
+ * from the steering rack position and the vehicle speed. Expected to change
+ * while driving - per lap or per surface - so it is a remotely set parameter
+ * just like @ref ThrottleCurve_SetLimit, not a vehicle constant. Safe to call
+ * from any context, including the CAN RX interrupt.
+ *
+ * @param[in] gainPercent Gain in percent, 0 - @ref TV_CONFIG_GAIN_MAX. 0 gives
+ * both wheels the same command, 100 gives the whole calculated split.
+ *
+ * @return bool
+ * @retval true  Value accepted.
+ * @retval false Rejected (above the maximum). Active gain left unchanged.
+ */
+bool TorqueVectoring_SetGain(uint8_t gainPercent);
+
+/**
+ * @brief  Returns the active torque vectoring gain.
+ * @details Defaults to @ref TV_CONFIG_GAIN_DEFAULT until a new value arrives.
+ *
+ * @return uint8_t Gain in percent, 0 - @ref TV_CONFIG_GAIN_MAX.
+ */
+uint8_t TorqueVectoring_GetGain(void);
 #endif
