@@ -63,3 +63,32 @@ void Process_ADC_Buffers(void)
     ADC2_VAL[1] = sum2_ch2 / ADC_SAMPLES;
     ADC2_VAL[2] = sum2_ch3 / ADC_SAMPLES;
 }
+
+/**
+ * @brief  Maps the LPF ADC reading to signed rack travel in whole millimetres.
+ * @details Uses the same mm-per-count scale as the full ADC/mm calibration, then
+ * offsets by @ref LFP_CENTER so that ADC reading returns 0 mm and travel is
+ * +/- around it. Out-of-range ADC values are clamped to the calibrated ends.
+ *
+ * @return Displacement from the centred rack [mm].
+ */
+int16_t Get_SteeringValue(void)
+{
+    uint32_t adc_reading = ADC1_VAL[2];
+
+    if (adc_reading < LPF_SENSOR_ADC_MIN_VALUE) {
+        adc_reading = LPF_SENSOR_ADC_MIN_VALUE;
+    }
+    else if (adc_reading > LPF_SENSOR_ADC_MAX_VALUE) {
+        adc_reading = LPF_SENSOR_ADC_MAX_VALUE;
+    }
+
+    const int32_t adc_span = (int32_t)LPF_SENSOR_ADC_MAX_VALUE
+            - (int32_t)LPF_SENSOR_ADC_MIN_VALUE;
+    const int32_t mm_span = (int32_t)LPF_SENSOR_MM_MAX_VALUE
+            - (int32_t)LPF_SENSOR_MM_MIN_VALUE;
+    const int32_t adc_delta = (int32_t)adc_reading - (int32_t)LFP_CENTER;
+    const int32_t round = (adc_delta >= 0) ? (adc_span / 2) : -(adc_span / 2);
+
+    return (int16_t)((adc_delta * mm_span + round) / adc_span);
+}

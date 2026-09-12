@@ -110,15 +110,5 @@
  */
 #define AMOUNT_OF_ADC_CHANNELS (3)
 
-/**
- * @defgroup LPF_Sensor_Calibration LPF Sensor Calibration
- * @brief    Raw ADC values defining the physical range of the LPF sensor.
- * @note     These values must be updated if the potentiometer or mechanical mounting changes.
- * @{
- */
-#define LPF_SENSOR_ADC_MIN_VALUE (0)
-#define LPF_SENSOR_ADC_MAX_VALUE (1023)
-#define LPF_SENSOR_MM_MIN_VALUE (0)
-#define LPF_SENSOR_MM_MAX_VALUE (175)
 
 #endif /* PEDALS_CONST_H */

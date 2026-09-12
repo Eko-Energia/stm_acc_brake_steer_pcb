@@ -85,11 +85,12 @@ typedef struct {
 	} Steering;
 
 	/**
-	 * @brief Latest mapped driver-input percentages (0-100).
+	 * @brief Latest mapped driver inputs.
+	 * Steer is rack displacement from the LFP_CENTER ADC reading [mm]; pedals are 0-100%.
 	 * Updated in the main loop; packed into the Jetson CAN frame by Jetson_GetData().
 	 */
 	struct {
-		uint8_t Steer;
+		int16_t Steer;
 		uint8_t BrakePistons;
 		uint8_t BrakeHall;
 		uint8_t Accel;

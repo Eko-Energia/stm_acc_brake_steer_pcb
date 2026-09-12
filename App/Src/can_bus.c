@@ -400,6 +400,6 @@ void CAN_Custom_Init(CAN_HandleTypeDef *hcan) {
 	TxHeader.StdId = 0x41;     // 65 (decimal)
 	TxHeader.IDE = CAN_ID_STD;
 	TxHeader.RTR = CAN_RTR_DATA;
-	TxHeader.DLC = 4;
+	TxHeader.DLC = 5;
 }
 
