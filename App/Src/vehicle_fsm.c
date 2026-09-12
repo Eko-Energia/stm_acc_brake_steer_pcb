@@ -246,7 +246,7 @@ void EngineThrottle_GetData(uint8_t *data, void *context ) {
 		// request for no torque and must reach the inverters unchanged.
 		if(localTH == 0 && ThrottleCurve_GetLimit() != 0)
 		{
-			localTH = 1;
+			localTH = 10;
 		}
 	}
 
