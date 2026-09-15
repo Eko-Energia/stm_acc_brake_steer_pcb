@@ -77,13 +77,6 @@ typedef struct {
 		uint32_t LastMsgTickFR;
 	} WheelSpeed;
 
-	/** @brief Steering rack position, read from the same frame as PRND. */
-	struct {
-		int16_t RackMm;				///< Displacement from the centred rack [mm]. Positive means a left turn.
-		bool IsConnected;			///< True after the first frame. NOT a watchdog: nothing clears it, so it says nothing about freshness.
-		uint32_t LastMsgTick;		///< Timestamp (HAL_GetTick) of the last received CAN frame.
-	} Steering;
-
 	/**
 	 * @brief Latest mapped driver inputs.
 	 * Steer is rack displacement from the LFP_CENTER ADC reading [mm]; pedals are 0-100%.

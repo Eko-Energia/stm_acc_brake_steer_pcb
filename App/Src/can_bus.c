@@ -68,27 +68,6 @@ const CAN_SignalConfig_t SIG_WHEEL_SPEED_SENSOR = {
     .isSigned = false
 };
 
-/** @brief Configuration for extracting the raw "Absolute_Encoder" count from the Dashboard CAN frame. */
-const CAN_SignalConfig_t SIG_ABSOLUTE_ENCODER = {
-    .startBit = 0,
-    .length = 14,
-    .factor = 1.0f,
-    .offset = 0.0f,
-    .isSigned = false
-};
-
-/** @brief Absolute encoder count read with the steering rack centred. */
-#define ENCODER_CENTER_RAW (8192)
-
-/** @brief Rack displacement per encoder count [mm]: the 16384-count sweep
- *         (+-540 deg) covers the calibrated +-70 mm, so 140/16384 = 35/4096.
- *         Correct this pair once the steering ratio is measured on the car. */
-#define ENCODER_RACK_MM_NUM (35)
-#define ENCODER_RACK_MM_DEN (4096)
-
-/** @brief Set to -1 if the encoder counts up while the rack moves to the right. */
-#define ENCODER_RACK_DIRECTION (1)
-
 
 /**
  * @brief  Extracts a physical signal value from a raw CAN frame based on configuration.
@@ -148,7 +127,7 @@ bool CAN_ExtractSignal(const uint8_t* frameData, const CAN_SignalConfig_t *confi
  * - Charger status (ExtID: 0x1806E5F4)
  * - Jetson data (StdID: 0x200)
  * - Wheel Speed (ID 0x1A6, 0x1A7 rear, 0x661, 0x641 front)
- * - PRND status and steering rack position (ID 0x3e1)
+ * - PRND status (ID 0x3e1)
  *
  * * @param[in] pHeader Pointer to the CAN Rx Header structure containing ID, IDE, DLC, etc.
  * @param[in] data    Pointer to the payload data (8 bytes).
@@ -187,18 +166,6 @@ void CAN_ProcessFrame(CAN_RxHeaderTypeDef *pHeader, uint8_t* data) {
     		Vehicle.PRND.RawStatus = (uint8_t)val;
 			Vehicle.PRND.LastMsgTick = HAL_GetTick();
 			Vehicle.PRND.IsConnected = true;
-		}
-
-    	// Steering rack position rides in the same frame as PRND, so it needs no
-    	// filter of its own. Kept in whole millimetres, the unit torque vectoring takes.
-    	if (CAN_ExtractSignal(data, &SIG_ABSOLUTE_ENCODER, &val))
-		{
-    		int32_t encoderOffset = (int32_t)val - ENCODER_CENTER_RAW;
-
-    		Vehicle.Steering.RackMm = (int16_t)(ENCODER_RACK_DIRECTION *
-    				(encoderOffset * ENCODER_RACK_MM_NUM) / ENCODER_RACK_MM_DEN);
-			Vehicle.Steering.LastMsgTick = HAL_GetTick();
-			Vehicle.Steering.IsConnected = true;
 		}
     }
 
