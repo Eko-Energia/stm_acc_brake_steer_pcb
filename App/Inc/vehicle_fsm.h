@@ -156,7 +156,7 @@ void stateActions(void);
  * - Byte 0: Brake pistons pressure
  * - Byte 1: Brake Hall sensor status
  * - Byte 2: Accelerator pedal position
- * - Byte 3: Steering rack displacement LSB (signed mm, Intel / little-endian)
+ * - Byte 3: Steering rack displacement LSB (signed, 0.1 mm per unit as in the DBC, Intel / little-endian)
  * - Byte 4: Steering rack displacement MSB
  * - Bytes 5-7: Reserved (Zeroed by the driver automatically)
  *

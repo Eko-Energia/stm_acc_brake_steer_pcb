@@ -14,6 +14,7 @@
 #include "can_bus.h"
 #include "vehicle_types.h"
 #include "can_driver.h"
+#include "vehicle_fsm.h"
 
 /** @brief Buffer (from EKO CAN driver) holding frames received in the RX interrupt,
  *         processed later in the main loop by @ref CAN_ProcessIncoming. */
@@ -126,6 +127,7 @@ bool CAN_ExtractSignal(const uint8_t* frameData, const CAN_SignalConfig_t *confi
  * It handles:
  * - Charger status (ExtID: 0x1806E5F4)
  * - Jetson data (StdID: 0x200)
+ * - Torque vectoring gain (StdID: 0x203)
  * - Wheel Speed (ID 0x1A6, 0x1A7 rear, 0x661, 0x641 front)
  * - PRND status (ID 0x3e1)
  *
@@ -155,6 +157,15 @@ void CAN_ProcessFrame(CAN_RxHeaderTypeDef *pHeader, uint8_t* data) {
         //memcpy((void*)Vehicle.Jetson.RawData, data, 8); 		// in case when some operations will be needed to perform on the data from Jetson
         Vehicle.Jetson.LastMsgTick = HAL_GetTick();
         Vehicle.Jetson.IsConnected = true;
+    }
+
+    // Checking the torque vectoring gain (Standard ID: 0x203, DBC 515
+    // JETSON_STATIC_TorqueVectoring). Sent by hand from a laptop for now.
+    if (pHeader->IDE == CAN_ID_STD && pHeader->StdId == 0x203) {
+        // Byte 0 is the gain in percent. The setter rejects anything above
+        // TV_CONFIG_GAIN_MAX and keeps the previous gain, so a bad frame is
+        // simply ignored here.
+        (void)TorqueVectoring_SetGain(data[0]);
     }
 
     // Checking PRND UNKNOWN ID FIX IT LATER
@@ -260,6 +271,7 @@ void CAN_ProcessIncoming(void) {
  * - Bank 2: PRND (Standard ID: 0x3e1)
  * - Bank 3: Rear Wheel Speed (Standard ID: 0x1A6, 0x1A7)
  * - Bank 4: Front Wheel Speed (Standard ID: 0x661, 0x641)
+ * - Bank 5: Torque vectoring gain (Standard ID: 0x203)
  * * After configuring the filters to route accepted messages into RX FIFO0,
  * it activates the FIFO0 message pending interrupt and starts the CAN module.
  *
@@ -333,6 +345,14 @@ void CAN_Custom_Init(CAN_HandleTypeDef *hcan) {
     filterConfig.FilterIdHigh     = (0x661 << 5);  // slot 1: FL
     filterConfig.FilterIdLow      = 0;
     filterConfig.FilterMaskIdHigh = (0x641 << 5);  // slot 2: FR (w list mode = drugi ID)
+    filterConfig.FilterMaskIdLow  = 0;
+    if (HAL_CAN_ConfigFilter(hcan, &filterConfig) != HAL_OK) { Error_Handler(); }
+
+    // FILTER 6 - Torque vectoring gain (Standard ID: 0x203) -> BANK 5
+    filterConfig.FilterBank = 5;
+    filterConfig.FilterIdHigh     = (0x203 << 5);
+    filterConfig.FilterIdLow      = 0;
+    filterConfig.FilterMaskIdHigh = 0;
     filterConfig.FilterMaskIdLow  = 0;
     if (HAL_CAN_ConfigFilter(hcan, &filterConfig) != HAL_OK) { Error_Handler(); }
 
