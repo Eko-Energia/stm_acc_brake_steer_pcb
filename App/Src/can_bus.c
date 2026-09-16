@@ -14,6 +14,7 @@
 #include "can_bus.h"
 #include "vehicle_types.h"
 #include "can_driver.h"
+#include "vehicle_fsm.h"
 
 /** @brief Buffer (from EKO CAN driver) holding frames received in the RX interrupt,
  *         processed later in the main loop by @ref CAN_ProcessIncoming. */
@@ -67,27 +68,6 @@ const CAN_SignalConfig_t SIG_WHEEL_SPEED_SENSOR = {
     .offset = 0.0f,
     .isSigned = false
 };
-
-/** @brief Configuration for extracting the raw "Absolute_Encoder" count from the Dashboard CAN frame. */
-const CAN_SignalConfig_t SIG_ABSOLUTE_ENCODER = {
-    .startBit = 0,
-    .length = 14,
-    .factor = 1.0f,
-    .offset = 0.0f,
-    .isSigned = false
-};
-
-/** @brief Absolute encoder count read with the steering rack centred. */
-#define ENCODER_CENTER_RAW (8192)
-
-/** @brief Rack displacement per encoder count [mm]: the 16384-count sweep
- *         (+-540 deg) covers the calibrated +-70 mm, so 140/16384 = 35/4096.
- *         Correct this pair once the steering ratio is measured on the car. */
-#define ENCODER_RACK_MM_NUM (35)
-#define ENCODER_RACK_MM_DEN (4096)
-
-/** @brief Set to -1 if the encoder counts up while the rack moves to the right. */
-#define ENCODER_RACK_DIRECTION (1)
 
 
 /**
@@ -147,8 +127,9 @@ bool CAN_ExtractSignal(const uint8_t* frameData, const CAN_SignalConfig_t *confi
  * It handles:
  * - Charger status (ExtID: 0x1806E5F4)
  * - Jetson data (StdID: 0x200)
+ * - Torque vectoring gain (StdID: 0x203)
  * - Wheel Speed (ID 0x1A6, 0x1A7 rear, 0x661, 0x641 front)
- * - PRND status and steering rack position (ID 0x3e1)
+ * - PRND status (ID 0x3e1)
  *
  * * @param[in] pHeader Pointer to the CAN Rx Header structure containing ID, IDE, DLC, etc.
  * @param[in] data    Pointer to the payload data (8 bytes).
@@ -178,6 +159,15 @@ void CAN_ProcessFrame(CAN_RxHeaderTypeDef *pHeader, uint8_t* data) {
         Vehicle.Jetson.IsConnected = true;
     }
 
+    // Checking the torque vectoring gain (Standard ID: 0x203, DBC 515
+    // JETSON_STATIC_TorqueVectoring). Sent by hand from a laptop for now.
+    if (pHeader->IDE == CAN_ID_STD && pHeader->StdId == 0x203) {
+        // Byte 0 is the gain in percent. The setter rejects anything above
+        // TV_CONFIG_GAIN_MAX and keeps the previous gain, so a bad frame is
+        // simply ignored here.
+        (void)TorqueVectoring_SetGain(data[0]);
+    }
+
     // Checking PRND UNKNOWN ID FIX IT LATER
     //	assuming random id for tests
     if (pHeader-> IDE == CAN_ID_STD && pHeader->StdId == 0x3e1){
@@ -187,18 +177,6 @@ void CAN_ProcessFrame(CAN_RxHeaderTypeDef *pHeader, uint8_t* data) {
     		Vehicle.PRND.RawStatus = (uint8_t)val;
 			Vehicle.PRND.LastMsgTick = HAL_GetTick();
 			Vehicle.PRND.IsConnected = true;
-		}
-
-    	// Steering rack position rides in the same frame as PRND, so it needs no
-    	// filter of its own. Kept in whole millimetres, the unit torque vectoring takes.
-    	if (CAN_ExtractSignal(data, &SIG_ABSOLUTE_ENCODER, &val))
-		{
-    		int32_t encoderOffset = (int32_t)val - ENCODER_CENTER_RAW;
-
-    		Vehicle.Steering.RackMm = (int16_t)(ENCODER_RACK_DIRECTION *
-    				(encoderOffset * ENCODER_RACK_MM_NUM) / ENCODER_RACK_MM_DEN);
-			Vehicle.Steering.LastMsgTick = HAL_GetTick();
-			Vehicle.Steering.IsConnected = true;
 		}
     }
 
@@ -293,6 +271,7 @@ void CAN_ProcessIncoming(void) {
  * - Bank 2: PRND (Standard ID: 0x3e1)
  * - Bank 3: Rear Wheel Speed (Standard ID: 0x1A6, 0x1A7)
  * - Bank 4: Front Wheel Speed (Standard ID: 0x661, 0x641)
+ * - Bank 5: Torque vectoring gain (Standard ID: 0x203)
  * * After configuring the filters to route accepted messages into RX FIFO0,
  * it activates the FIFO0 message pending interrupt and starts the CAN module.
  *
@@ -366,6 +345,14 @@ void CAN_Custom_Init(CAN_HandleTypeDef *hcan) {
     filterConfig.FilterIdHigh     = (0x661 << 5);  // slot 1: FL
     filterConfig.FilterIdLow      = 0;
     filterConfig.FilterMaskIdHigh = (0x641 << 5);  // slot 2: FR (w list mode = drugi ID)
+    filterConfig.FilterMaskIdLow  = 0;
+    if (HAL_CAN_ConfigFilter(hcan, &filterConfig) != HAL_OK) { Error_Handler(); }
+
+    // FILTER 6 - Torque vectoring gain (Standard ID: 0x203) -> BANK 5
+    filterConfig.FilterBank = 5;
+    filterConfig.FilterIdHigh     = (0x203 << 5);
+    filterConfig.FilterIdLow      = 0;
+    filterConfig.FilterMaskIdHigh = 0;
     filterConfig.FilterMaskIdLow  = 0;
     if (HAL_CAN_ConfigFilter(hcan, &filterConfig) != HAL_OK) { Error_Handler(); }
 

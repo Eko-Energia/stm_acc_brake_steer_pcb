@@ -65,12 +65,15 @@ void Process_ADC_Buffers(void)
 }
 
 /**
- * @brief  Maps the LPF ADC reading to signed rack travel in whole millimetres.
+ * @brief  Maps the LPF ADC reading to signed rack travel in tenths of a millimetre.
  * @details Uses the same mm-per-count scale as the full ADC/mm calibration, then
- * offsets by @ref LFP_CENTER so that ADC reading returns 0 mm and travel is
+ * offsets by @ref LFP_CENTER so that ADC reading returns 0 and travel is
  * +/- around it. Out-of-range ADC values are clamped to the calibrated ends.
+ * The quantity is rack travel in millimetres. It is scaled by
+ * @ref STEERING_UNITS_PER_MM so that the resolution matches the 0.1 factor the
+ * DBC gives the Steering signal, and frame 0x41 needs no second conversion.
  *
- * @return Displacement from the centred rack [mm].
+ * @return Displacement from the centred rack [0.1 mm].
  */
 int16_t Get_SteeringValue(void)
 {
@@ -90,5 +93,5 @@ int16_t Get_SteeringValue(void)
     const int32_t adc_delta = (int32_t)adc_reading - (int32_t)LFP_CENTER;
     const int32_t round = (adc_delta >= 0) ? (adc_span / 2) : -(adc_span / 2);
 
-    return (int16_t)((adc_delta * mm_span + round) / adc_span);
+    return (int16_t)((adc_delta * mm_span * STEERING_UNITS_PER_MM + round) / adc_span);
 }

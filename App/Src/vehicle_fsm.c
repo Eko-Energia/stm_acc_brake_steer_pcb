@@ -26,6 +26,12 @@ static int16_t tempTHR = 0;
 /** @brief Torque vectoring gain [%]. Volatile: the setter may run in the CAN RX interrupt. */
 static volatile uint8_t tvGainPercent = TV_CONFIG_GAIN_DEFAULT;
 
+/** @brief Sign applied to the rack reading before the split, which takes a
+ *         left turn as positive. Get_SteeringValue() grows with the ADC count
+ *         and nobody has yet checked on the car which way the rack moves for
+ *         that. Set to -1 if the split favours the wrong wheel in a corner. */
+#define STEERING_RACK_LEFT_POSITIVE (1)
+
 // The split works in inverter command units, so nothing is rescaled on the way out.
 _Static_assert(THROTTLE_MAX_VAL == TV_CONFIG_COMMAND_MAX,
                "throttle curve and torque vectoring must share one command range");
@@ -168,6 +174,12 @@ static uint32_t wheelSpeedMmps(float speedMps)
  * themselves. The front wheels merely refine the speed estimate, so a missing
  * front sensor degrades the result instead of stopping the split.
  *
+ * The rack position is this board's own LPF sensor. The caller mapped it to
+ * millimetres of rack travel earlier in the same cycle, held in
+ * @ref Vehicle.Pedals.Steer at the tenth-of-a-millimetre resolution frame 0x41
+ * carries, so it is reduced here to the whole millimetres this algorithm takes.
+ * There is no encoder on the car, so nothing is read from CAN for it.
+ *
  * @param[in]  pedalCommand Throttle command from @ref ThrottleCurve_Apply.
  * @param[out] leftCommand  Command for the left rear wheel.
  * @param[out] rightCommand Command for the right rear wheel.
@@ -194,9 +206,25 @@ static void torqueVectoringSplit(int16_t pedalCommand, int16_t *leftCommand, int
 					rearLeftMmps, rearRightMmps)
 			: tv_com_velocity_from_rear_wheels_mmps(&tvVehicle, rearLeftMmps, rearRightMmps);
 
+	// An on-board sensor cannot go missing the way a CAN frame can, so the
+	// reading is always "available". The sensor stroke (about +-87 mm) is
+	// wider than the +-70 mm the radius fit was measured on; past that the
+	// algorithm would refuse and the split would jump back to 50/50 at full
+	// lock, so the reading is held at the tightest calibrated radius instead.
+	int32_t rackMm = STEERING_RACK_LEFT_POSITIVE *
+			((int32_t)Vehicle.Pedals.Steer / STEERING_UNITS_PER_MM);
+
+	if (rackMm > (int32_t)TV_CONFIG_RACK_MAX_MM)
+	{
+		rackMm = (int32_t)TV_CONFIG_RACK_MAX_MM;
+	}
+	else if (rackMm < -(int32_t)TV_CONFIG_RACK_MAX_MM)
+	{
+		rackMm = -(int32_t)TV_CONFIG_RACK_MAX_MM;
+	}
+
 	const WheelCommands split = tv_calculate_rear_commands_from_rack(&tvVehicle,
-			Vehicle.Steering.IsConnected, Vehicle.Steering.RackMm, speedMmps,
-			pedalCommand, tvGainPercent);
+			true, rackMm, speedMmps, pedalCommand, tvGainPercent);
 
 	// Only a complete calculation may change the commands; a rejected input
 	// keeps the equal split the car drives on today. Being past the grip limit
