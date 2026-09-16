@@ -27,10 +27,6 @@
 #define LPF_SENSOR_MM_MAX_VALUE (174)
 /** Raw ADC value at the centred rack, from calibration. Replace with the tested reading. */
 #define LFP_CENTER (503)
-/** Resolution of Get_SteeringValue(): units per millimetre. 10 makes one unit
- *  0.1 mm, the factor the DBC gives the Steering signal of frame 0x41, so the
- *  value goes into that frame as it is. Divide by it for whole millimetres. */
-#define STEERING_UNITS_PER_MM (10)
 
 /** * @brief   Array containing averaged values from ADC1.
  *
@@ -70,7 +66,7 @@ void Process_ADC_Buffers(void);
 
 /**
  * @brief  Maps the LPF steering sensor to signed rack travel.
- * @return Displacement from @ref LFP_CENTER in 0.1 mm units (see @ref STEERING_UNITS_PER_MM).
+ * @return Displacement from @ref LFP_CENTER in whole millimetres.
  */
 int16_t Get_SteeringValue(void);
 

@@ -174,10 +174,11 @@ static uint32_t wheelSpeedMmps(float speedMps)
  * themselves. The front wheels merely refine the speed estimate, so a missing
  * front sensor degrades the result instead of stopping the split.
  *
- * The rack position is this board's own LPF sensor, already mapped to 0.1 mm
- * units in @ref Vehicle.Pedals.Steer by the caller earlier in the same cycle
- * and reduced here to the whole millimetres the algorithm takes. There is no
- * encoder on the car, so nothing is read from CAN for it.
+ * The rack position is this board's own LPF sensor, already mapped to whole
+ * millimetres in @ref Vehicle.Pedals.Steer by the caller earlier in the same
+ * cycle - the unit the pedal board publishes on 0x41 and the unit this
+ * algorithm takes. There is no encoder on the car, so nothing is read from CAN
+ * for it.
  *
  * @param[in]  pedalCommand Throttle command from @ref ThrottleCurve_Apply.
  * @param[out] leftCommand  Command for the left rear wheel.
@@ -210,8 +211,7 @@ static void torqueVectoringSplit(int16_t pedalCommand, int16_t *leftCommand, int
 	// wider than the +-70 mm the radius fit was measured on; past that the
 	// algorithm would refuse and the split would jump back to 50/50 at full
 	// lock, so the reading is held at the tightest calibrated radius instead.
-	int32_t rackMm = STEERING_RACK_LEFT_POSITIVE *
-			((int32_t)Vehicle.Pedals.Steer / STEERING_UNITS_PER_MM);
+	int32_t rackMm = STEERING_RACK_LEFT_POSITIVE * (int32_t)Vehicle.Pedals.Steer;
 
 	if (rackMm > (int32_t)TV_CONFIG_RACK_MAX_MM)
 	{
