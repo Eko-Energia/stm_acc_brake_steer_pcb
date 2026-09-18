@@ -89,12 +89,12 @@
 /**
  * @brief Raw ADC value when the brake pedal is fully released (0%).
  */
-#define BRAKE_HALL_MIN_VAL (166)
+#define BRAKE_HALL_MIN_VAL (158)
 
 /**
  * @brief Raw ADC value when the brake pedal is fully pressed (100%).
  */
-#define BRAKE_HALL_MAX_VAL (724)
+#define BRAKE_HALL_MAX_VAL (470)
 
 /**
  * @brief Calculated working range of the brake Hall sensor.
