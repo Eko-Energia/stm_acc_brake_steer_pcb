@@ -89,7 +89,7 @@
 /**
  * @brief Raw ADC value when the brake pedal is fully released (0%).
  */
-#define BRAKE_HALL_MIN_VAL (158)
+#define BRAKE_HALL_MIN_VAL (165)
 
 /**
  * @brief Raw ADC value when the brake pedal is fully pressed (100%).
