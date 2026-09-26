@@ -36,7 +36,7 @@
  * Gain used until a new one arrives over CAN [%]; 50 splits the difference
  * between an open differential (0) and the full calculated split (100).
  */
-#define TV_CONFIG_GAIN_DEFAULT 50U
+#define TV_CONFIG_GAIN_DEFAULT 0U
 
 /** Smallest supported non-zero rack displacement magnitude [mm]. */
 #define TV_CONFIG_RACK_MIN_MM 1U
