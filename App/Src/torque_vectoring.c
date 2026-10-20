@@ -464,6 +464,14 @@ uint32_t tv_com_velocity_from_wheel_speeds_mmps(
         return 0U;
     }
 
+    /* A front sensor that reads 0 while the car moves would drag the
+       four-wheel average down, so a zero on either side drops the whole front
+       pair and the estimate comes from the rear wheels alone. */
+    if (front_left_speed_mmps == 0U || front_right_speed_mmps == 0U) {
+        return tv_com_velocity_from_rear_wheels_mmps(
+            vehicle, rear_left_speed_mmps, rear_right_speed_mmps);
+    }
+
     const uint32_t yaw_mradps = divide_rounded_u32(
         unsigned_delta_u32(rear_left_speed_mmps, rear_right_speed_mmps) * 1000U,
         vehicle->track_width_mm);
