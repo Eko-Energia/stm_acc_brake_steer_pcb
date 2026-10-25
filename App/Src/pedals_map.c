@@ -174,7 +174,7 @@ _Static_assert(THROTTLE_LIMIT_MAX <= (THROTTLE_LUT_SIZE - 1),
                "throttle limit must not exceed the table's highest index");
 
 static int16_t throttleLut[THROTTLE_LUT_SIZE];
-static volatile float throttleZRequested = THROTTLE_Z_MIN;
+static volatile float throttleZRequested = THROTTLE_Z_DEFAULT;
 static volatile bool throttleLutDirty = true;
 
 // Applied at lookup time, so it needs no rebuild and no dirty flag.

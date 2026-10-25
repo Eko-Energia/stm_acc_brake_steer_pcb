@@ -15,6 +15,7 @@
 #include "vehicle_types.h"
 #include "can_driver.h"
 #include "vehicle_fsm.h"
+#include "pedals_map.h"
 
 /** @brief Buffer (from EKO CAN driver) holding frames received in the RX interrupt,
  *         processed later in the main loop by @ref CAN_ProcessIncoming. */
@@ -65,6 +66,24 @@ const CAN_SignalConfig_t SIG_WHEEL_SPEED_SENSOR = {
     .startBit = 0,
     .length = 16,
     .factor = 0.000839f,    // 0.000839f is the sensor scaling factor to m/s
+    .offset = 0.0f,
+    .isSigned = false
+};
+
+/** @brief ThrottleLimiter from JETSON_STATIC_ChildMode (DBC 513): 0-100 %. */
+const CAN_SignalConfig_t SIG_THROTTLE_LIMIT = {
+    .startBit = 0,
+    .length = 8,
+    .factor = 1.0f,
+    .offset = 0.0f,
+    .isSigned = false
+};
+
+/** @brief Function_Z from JETSON_STATIC_PedalSensitivity (DBC 514): raw * 0.1. */
+const CAN_SignalConfig_t SIG_THROTTLE_Z = {
+    .startBit = 0,
+    .length = 16,
+    .factor = 0.1f,
     .offset = 0.0f,
     .isSigned = false
 };
@@ -127,6 +146,7 @@ bool CAN_ExtractSignal(const uint8_t* frameData, const CAN_SignalConfig_t *confi
  * It handles:
  * - Charger status (ExtID: 0x1806E5F4)
  * - Jetson data (StdID: 0x200)
+ * - Throttle limit (StdID: 0x201) and curve exponent (StdID: 0x202)
  * - Torque vectoring gain (StdID: 0x203)
  * - Wheel Speed (ID 0x1A6, 0x1A7 rear, 0x661, 0x641 front)
  * - PRND status (ID 0x3e1)
@@ -157,6 +177,26 @@ void CAN_ProcessFrame(CAN_RxHeaderTypeDef *pHeader, uint8_t* data) {
         //memcpy((void*)Vehicle.Jetson.RawData, data, 8); 		// in case when some operations will be needed to perform on the data from Jetson
         Vehicle.Jetson.LastMsgTick = HAL_GetTick();
         Vehicle.Jetson.IsConnected = true;
+    }
+
+    // Throttle limit (Standard ID: 0x201, DBC 513 JETSON_STATIC_ChildMode).
+    // ThrottleLimiter is one unsigned byte, 0-100 %. The setter rejects
+    // anything above THROTTLE_LIMIT_MAX and keeps the previous limit.
+    if (pHeader->IDE == CAN_ID_STD && pHeader->StdId == 0x201 && pHeader->DLC >= 1) {
+        float val;
+        if (CAN_ExtractSignal(data, &SIG_THROTTLE_LIMIT, &val)) {
+            (void)ThrottleCurve_SetLimit((uint8_t)val);
+        }
+    }
+
+    // Curve exponent (Standard ID: 0x202, DBC 514 JETSON_STATIC_PedalSensitivity).
+    // Function_Z is a little-endian uint16, factor 0.1, physical range 20-300.
+    // The setter rejects anything outside that window and keeps the previous z.
+    if (pHeader->IDE == CAN_ID_STD && pHeader->StdId == 0x202 && pHeader->DLC >= 2) {
+        float val;
+        if (CAN_ExtractSignal(data, &SIG_THROTTLE_Z, &val)) {
+            (void)ThrottleCurve_SetZ(val);
+        }
     }
 
     // Checking the torque vectoring gain (Standard ID: 0x203, DBC 515
@@ -272,6 +312,7 @@ void CAN_ProcessIncoming(void) {
  * - Bank 3: Rear Wheel Speed (Standard ID: 0x1A6, 0x1A7)
  * - Bank 4: Front Wheel Speed (Standard ID: 0x661, 0x641)
  * - Bank 5: Torque vectoring gain (Standard ID: 0x203)
+ * - Bank 6: Throttle limit and curve exponent (Standard ID: 0x201, 0x202)
  * * After configuring the filters to route accepted messages into RX FIFO0,
  * it activates the FIFO0 message pending interrupt and starts the CAN module.
  *
@@ -353,6 +394,14 @@ void CAN_Custom_Init(CAN_HandleTypeDef *hcan) {
     filterConfig.FilterIdHigh     = (0x203 << 5);
     filterConfig.FilterIdLow      = 0;
     filterConfig.FilterMaskIdHigh = 0;
+    filterConfig.FilterMaskIdLow  = 0;
+    if (HAL_CAN_ConfigFilter(hcan, &filterConfig) != HAL_OK) { Error_Handler(); }
+
+    // FILTER 7 - Throttle limit (0x201) + curve exponent (0x202) -> BANK 6
+    filterConfig.FilterBank = 6;
+    filterConfig.FilterIdHigh     = (0x201 << 5);  // slot 1: JETSON_STATIC_ChildMode
+    filterConfig.FilterIdLow      = 0;
+    filterConfig.FilterMaskIdHigh = (0x202 << 5);  // slot 2: JETSON_STATIC_PedalSensitivity
     filterConfig.FilterMaskIdLow  = 0;
     if (HAL_CAN_ConfigFilter(hcan, &filterConfig) != HAL_OK) { Error_Handler(); }
 

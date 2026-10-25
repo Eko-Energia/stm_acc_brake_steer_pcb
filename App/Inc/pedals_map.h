@@ -117,11 +117,25 @@ uint16_t engineSteer(uint16_t *accel1val, uint16_t *accel2val);
 // THROTTLE CURVE
 // ============================================================================
 
-/** @brief Lowest accepted curve exponent. z = 1 gives a linear response. */
-#define THROTTLE_Z_MIN (1.0f)
+/**
+ * @brief Exponent used until a pedal-sensitivity frame arrives.
+ * @details z = 1 is a linear map. It sits outside the CAN window on purpose, so
+ * the pedal stays linear until Jetson sends a value the database allows.
+ */
+#define THROTTLE_Z_DEFAULT (1.0f)
 
-/** @brief Highest accepted curve exponent. Widen if the CAN specification changes. */
-#define THROTTLE_Z_MAX (4.0f)
+/**
+ * @brief Lowest accepted curve exponent.
+ * @details Physical minimum of Function_Z (CAN_DB.dbc, ID 514): factor 0.1,
+ * range [20|300].
+ */
+#define THROTTLE_Z_MIN (20.0f)
+
+/**
+ * @brief Highest accepted curve exponent.
+ * @details Physical maximum of Function_Z (CAN_DB.dbc, ID 514).
+ */
+#define THROTTLE_Z_MAX (300.0f)
 
 /** @brief Inverter full-scale torque command - the 'max_value' of the curve. */
 #define THROTTLE_MAX_VAL (32767)
