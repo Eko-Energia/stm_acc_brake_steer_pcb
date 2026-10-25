@@ -251,7 +251,10 @@ uint32_t tv_filter_wheel_speed_mmps(
  *
  * When the rear-axle yaw rate is at or below TV_CONFIG_STRAIGHT_YAW_MRADPS,
  * returns the average of all four speeds. Otherwise returns the rear-axle
- * bicycle-model estimate and ignores the front pair.
+ * bicycle-model estimate and ignores the front pair. A front speed of 0 is
+ * treated as a failed sensor rather than a measurement: if either front wheel
+ * reads 0, the front pair is ignored and the rear-axle estimate is returned
+ * regardless of the yaw rate.
  */
 uint32_t tv_com_velocity_from_wheel_speeds_mmps(
     const VehicleParameters *vehicle,
